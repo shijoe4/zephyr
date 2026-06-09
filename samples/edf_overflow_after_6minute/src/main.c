@@ -33,7 +33,7 @@ void thread_low_entry(void *p1, void *p2, void *p3) {
 
     k_sleep(K_SECONDS(358));
 
-	   k_thread_deadline_set(&thread_l_data,1);
+	   k_thread_deadline_set_64(&thread_l_data,1);
 	    k_reschedule(); 
   
       LOG_DBG("Thread_Low: Started with deadline %" PRId64 " ticks\n", _current->base.prio_deadline);

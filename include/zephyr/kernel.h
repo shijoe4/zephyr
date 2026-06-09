@@ -1128,7 +1128,7 @@ __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
 @param thread A thread on which to set the deadline
 */
 
-__syscall void k_thread_deadline_set_64(k_tid_t thread, int64_t deadline);
+__syscall void k_thread_deadline_set_64(k_tid_t thread, uint64_t deadline);
 
 
 
@@ -1136,7 +1136,7 @@ __syscall void k_thread_deadline_set_64(k_tid_t thread, int64_t deadline);
  * @brief Set absolute deadline expiration time for scheduler
  *
  * This sets the "deadline" expiration as a timestamp in the same
- * units used by k_cycle_get_32(). The scheduler (when deadline scheduling
+ * units used by k_cycle_get_64(). The scheduler (when deadline scheduling
  * is enabled) will choose the next expiring thread when selecting between
  * threads at the same static priority.  Threads at different priorities
  * will be scheduled according to their static priority.
@@ -1175,7 +1175,7 @@ __syscall void k_thread_deadline_set_64(k_tid_t thread, int64_t deadline);
 __syscall void k_thread_absolute_deadline_set(k_tid_t thread, int deadline);
 
 
-__syscall void k_thread_absolute_deadline_set_64(k_tid_t thread, int64_t deadline);
+__syscall void k_thread_absolute_deadline_set_64(k_tid_t thread, uint64_t deadline);
 #endif
 
 /**

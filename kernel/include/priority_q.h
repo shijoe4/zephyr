@@ -89,22 +89,16 @@ static ALWAYS_INLINE int32_t z_sched_prio_cmp(struct k_thread *thread_1, struct 
 	}
 
 #ifdef CONFIG_SCHED_DEADLINE
-	/* If we assume all deadlines live within the same "half" of
-	 * the 32 bit modulus space (this is a documented API rule),
-	 * then the latest deadline in the queue minus the earliest is
-	 * guaranteed to be (2's complement) non-negative.  We can
-	 * leverage that to compare the values without having to check
-	 * the current time.
-	 */
+
 	uint64_t d1 = thread_1->base.prio_deadline;
 	uint64_t d2 = thread_2->base.prio_deadline;
 
+
 	if (d1 != d2) {
-		/* Sooner deadline means higher effective priority.
-		 * Doing the calculation with unsigned types and casting
-		 * to signed isn't perfect, but at least reduces this
-		 * from UB on overflow to impdef.
-		 */
+		/*
+		*Type casted to int32_t to avoid API break 
+		*/
+		 
 		return (int32_t)((d2 >d1)? 1 : -1);
 	}
 #endif /* CONFIG_SCHED_DEADLINE */
