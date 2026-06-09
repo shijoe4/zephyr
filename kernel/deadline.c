@@ -36,7 +36,7 @@
  * @param deadline New absolute deadline value (raw cycle counter).
  */
 
-void z_sched_prio_deadline_set_64(struct k_thread *thread, int64_t deadline)
+void z_sched_prio_deadline_set_64(struct k_thread *thread, uint64_t deadline)
 {
 	K_SPINLOCK(&_sched_spinlock) {
 		if (z_is_thread_queued(thread)) {
@@ -51,10 +51,11 @@ void z_sched_prio_deadline_set_64(struct k_thread *thread, int64_t deadline)
 
 void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
 {
-	z_sched_prio_deadline_set_64(thread, (int64_t)deadline);
+uint32_t newdl =(uint32_t)deadline ; 
+	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
 }
 
-void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, int64_t deadline)
+void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
 	struct k_thread *thread = tid;
 
@@ -77,20 +78,24 @@ void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 	*
 	*
 	 */
-	z_sched_prio_deadline_set_64(thread, (int64_t)deadline);
+
+	 uint32_t newdl =(uint32_t)deadline ; 
+
+	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
 }
 
-void z_impl_k_thread_deadline_set_64(k_tid_t tid, int64_t deadline)
+void z_impl_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
-	deadline = clamp(deadline, 0, INT64_MAX);
+	deadline = clamp(deadline, 0, UINT64_MAX);
 
-	int64_t newdl = k_cycle_get_64() + deadline;
+	uint64_t newdl = k_cycle_get_64() + deadline;
 
 	z_impl_k_thread_absolute_deadline_set_64(tid, newdl);
 }
 
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 {
+<<<<<<< HEAD
 <<<<<<< HEAD
 	/*
 	 * Clamp the relative deadline to INT32_MAX / 2 (2^30 cycles) to
@@ -108,6 +113,11 @@ void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
  	deadline = clamp(deadline, 0, INT_MAX);
   z_impl_k_thread_deadline_set_64(tid, (int64_t)deadline);
 >>>>>>> 9095bdfb99b (edf 64bit api support)
+=======
+
+uint32_t newdl =(uint32_t)deadline ; 
+  z_impl_k_thread_deadline_set_64(tid, (uint64_t)newdl);
+>>>>>>> 8b5ef0e4d7b (64 bit edf with 32 bit support)
 }
 
 #ifdef CONFIG_USERSPACE
@@ -116,11 +126,11 @@ static inline void z_vrfy_k_thread_absolute_deadline_set(k_tid_t tid, int deadli
 	struct k_thread *thread = tid;
 
 	K_OOPS(K_SYSCALL_OBJ(thread, K_OBJ_THREAD));
-
-	z_impl_k_thread_absolute_deadline_set((k_tid_t)thread, (int64_t)deadline);
+ 
+	z_impl_k_thread_absolute_deadline_set((k_tid_t)thread, deadline);
 }
 
-static inline void z_vrfy_k_thread_absolute_deadline_set_64(k_tid_t tid, int64_t deadline)
+static inline void z_vrfy_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
 	struct k_thread *thread = tid;
 
@@ -143,14 +153,14 @@ static inline void z_vrfy_k_thread_deadline_set(k_tid_t tid, int deadline)
 	z_impl_k_thread_deadline_set((k_tid_t)thread, deadline);
 }
 
-static inline void z_vrfy_k_thread_deadline_set_64(k_tid_t tid, int64_t deadline)
+static inline void z_vrfy_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
 	struct k_thread *thread = tid;
 
 	K_OOPS(K_SYSCALL_OBJ(thread, K_OBJ_THREAD));
 	K_OOPS(K_SYSCALL_VERIFY_MSG(deadline > 0,
-				    "invalid thread deadline %PRId64",
-				    (int64_t)deadline));
+				    "invalid thread deadline %PRIu64",
+				    (uint64_t)deadline));
 
 	z_impl_k_thread_deadline_set_64((k_tid_t)thread, deadline);
 }
