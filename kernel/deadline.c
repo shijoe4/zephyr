@@ -49,11 +49,6 @@ void z_sched_prio_deadline_set_64(struct k_thread *thread, uint64_t deadline)
 	}
 }
 
-void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
-{
-uint32_t newdl =(uint32_t)deadline ; 
-	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
-}
 
 void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
@@ -69,55 +64,35 @@ void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 	z_sched_prio_deadline_set_64(thread, deadline);
 }
 	
-/*
-*32 bit wrapper for compatibility, will call the 64 bit version of the API. 
-*/
-
-void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
-{
-	struct k_thread *thread = tid;
-
-
-	 uint32_t newdl =(uint32_t)deadline ; 
-
-	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
-}
-
 void z_impl_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
 	deadline = clamp(deadline, 0, UINT64_MAX);
-
 	uint64_t newdl = k_cycle_get_64() + deadline;
-
 	z_impl_k_thread_absolute_deadline_set_64(tid, newdl);
+}
+
+/*
+*32 bit wrapper for compatibility, will call the 64 bit version of the API. 
+*/
+void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
+{
+	struct k_thread *thread = tid;
+	 uint32_t newdl =(uint32_t)deadline ; 
+	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
 }
 
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 {
-<<<<<<< HEAD
-<<<<<<< HEAD
-	/*
-	 * Clamp the relative deadline to INT32_MAX / 2 (2^30 cycles) to
-	 * satisfy the scheduler comparator's half-modulus invariant.
-	 * This leaves a 2^30-cycle margin of tolerance for scheduler
-	 * execution skew before priority inversion can occur.
-	 */
-	deadline = clamp(deadline, 0, INT32_MAX / 2);
-
-	/* Use uint32_t arithmetic to avoid implementation-defined signed conversion. */
-	uint32_t newdl = k_cycle_get_32() + (uint32_t)deadline;
-
-	z_impl_k_thread_absolute_deadline_set(tid, (int)newdl);
-=======
- 	deadline = clamp(deadline, 0, INT_MAX);
-  z_impl_k_thread_deadline_set_64(tid, (int64_t)deadline);
->>>>>>> 9095bdfb99b (edf 64bit api support)
-=======
-
-uint32_t newdl =(uint32_t)deadline ; 
-  z_impl_k_thread_deadline_set_64(tid, (uint64_t)newdl);
->>>>>>> 8b5ef0e4d7b (64 bit edf with 32 bit support)
+	 uint32_t newdl =(uint32_t)deadline ; 
+	 z_impl_k_thread_deadline_set_64(thread, (uint64_t)newdl);
 }
+
+void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
+{
+uint32_t newdl =(uint32_t)deadline ; 
+	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
+}
+
 
 #ifdef CONFIG_USERSPACE
 static inline void z_vrfy_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
