@@ -68,14 +68,15 @@ void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 	 */
 	z_sched_prio_deadline_set_64(thread, deadline);
 }
+	
+/*
+*32 bit wrapper for compatibility, will call the 64 bit version of the API. 
+*/
 
 void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 {
 	struct k_thread *thread = tid;
 
-	/* 
-	*32 bit wrapper for compatibility, will call the 64 bit version of the API. 
-	*/
 
 	 uint32_t newdl =(uint32_t)deadline ; 
 
