@@ -1126,6 +1126,7 @@ __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
 /*
 64-bit version of k_thread_deadline_set, for architectures where the cycle
 @param thread A thread on which to set the deadline
+@param deadline A time delta, in cycle units 
 */
 
 __syscall void k_thread_deadline_set_64(k_tid_t thread, uint64_t deadline);
