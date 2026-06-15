@@ -75,9 +75,7 @@ void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 
 	/* 
 	*32 bit wrapper for compatibility, will call the 64 bit version of the API. 
-	*
-	*
-	 */
+	*/
 
 	 uint32_t newdl =(uint32_t)deadline ; 
 
