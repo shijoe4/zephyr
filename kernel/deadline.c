@@ -84,7 +84,7 @@ void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 {
 	 uint32_t newdl =(uint32_t)deadline ; 
-	 z_impl_k_thread_deadline_set_64(thread, (uint64_t)newdl);
+	 z_impl_k_thread_deadline_set_64(tid, (uint64_t)newdl);
 }
 
 void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
