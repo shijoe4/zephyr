@@ -27,13 +27,15 @@ To build for another board, change "qemu_x86" above to that board's name.
 Sample Output
 =============
 qemu-system-arm: warning: nic stellaris_enet.0 has no peer
-*** Booting Zephyr OS build 11a87708d415 ***
+*** Booting Zephyr OS build c1f1215991a8 ***
 [00:00:00.000,000] <dbg> foo.main: Main: start
 
-[00:00:00.000,000] <dbg> foo.main: Main: starting thread1
+[00:06:00.010,000] <dbg> foo.thread_1_entry: thread_1: Started
 
-[00:06:00.010,000] <dbg> foo.thread_2_entry: thread_2: Started with deadline 25153921 ticks
+[00:06:00.010,000] <dbg> foo.thread_2_entry: thread_2: Started with deadline 25154781 ticks
 
 [00:06:00.060,000] <dbg> foo.thread_2_entry: thread_2: Finished
 
 [00:06:00.060,000] <dbg> foo.thread_1_entry: thread_1: Started with deadline 1073741823 ticks
+
+[00:06:10.060,000] <dbg> foo.thread_1_entry: thread_1: Finished

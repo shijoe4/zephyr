@@ -36,6 +36,7 @@ struct k_thread thread_1_data, thread_2_data;
 
 void thread_1_entry(void *p1, void *p2, void *p3) {
    
+  LOG_DBG("thread_1: Started\n");
 	  k_thread_absolute_deadline_set(&thread_1_data,INT32_MAX/2);
 	   k_reschedule(); 
   
@@ -88,7 +89,7 @@ LOG_DBG("Main: start\n");
       k_thread_name_set(thread2_pointer, "Thread_2_started\n");
 
 
-   LOG_DBG("Main: starting thread1\n"); 
+
 
    k_sleep(K_SECONDS(360));
 
@@ -98,7 +99,7 @@ LOG_DBG("Main: start\n");
     k_thread_join(thread2_pointer, K_FOREVER);
 
     while (1) {
-        k_msleep(1000); // Keep main thread alive
+        k_msleep(1000); 
     }
 
 
