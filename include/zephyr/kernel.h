@@ -1171,7 +1171,7 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  *
  * @note Deadlines are stored internally using 64 bit unsigned
  * integers.  The number of cycles between the "first" deadline in the
- * scheduler queue and the "last" deadline must be less than 2^64.
+ * scheduler queue and the "last" deadline must be less than 2^63.
  * Failure to adhere to this rule
  * may result in scheduled threads running in an incorrect deadline
  * order.
@@ -1185,7 +1185,7 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * logic.
  *
  * @note The relative deadline is silently clamped to a maximum of
- * UINT64_MAX (2^64 cycles) to preserve the scheduler's modular
+ * UINT64_MAX (2^63 cycles) to preserve the scheduler's modular
  * comparison invariants.
  *
  * @kconfig_dep{CONFIG_SCHED_DEADLINE}

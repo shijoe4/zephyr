@@ -99,7 +99,7 @@ static ALWAYS_INLINE struct k_thread *next_up(void)
 	}
 
 	if (active) {
-		int32_t cmp = z_sched_prio_cmp(_current, thread);
+		int64_t cmp = z_sched_prio_cmp(_current, thread);
 
 		/* Ties only switch if state says we yielded */
 		if ((cmp > 0) || ((cmp == 0) && !_current_cpu->swap_ok)) {

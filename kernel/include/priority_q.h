@@ -78,7 +78,7 @@ static ALWAYS_INLINE void z_priq_simple_init(sys_dlist_t *pq)
  * Do not rely on the actual value returned aside from the above.
  * (Again, like memcmp.)
  */
-static ALWAYS_INLINE int32_t z_sched_prio_cmp(struct k_thread *thread_1, struct k_thread *thread_2)
+static ALWAYS_INLINE int64_t z_sched_prio_cmp(struct k_thread *thread_1, struct k_thread *thread_2)
 {
 	/* `prio` is <32b, so the below cannot overflow. */
 	int32_t b1 = thread_1->base.prio;
@@ -90,16 +90,14 @@ static ALWAYS_INLINE int32_t z_sched_prio_cmp(struct k_thread *thread_1, struct 
 
 #ifdef CONFIG_SCHED_DEADLINE
 
-	uint64_t d1 = thread_1->base.prio_deadline;
-	uint64_t d2 = thread_2->base.prio_deadline;
+	int64_t d1 = thread_1->base.prio_deadline;
+	int64_t d2 = thread_2->base.prio_deadline;
 
 
 	if (d1 != d2) {
-		/*
-		*Type casted to int32_t to avoid API break 
-		*/
-		 
-		return (int32_t)((d2 >d1)? 1 : -1);
+
+		 return (int64_t)(d2-d1);
+		
 	}
 #endif /* CONFIG_SCHED_DEADLINE */
 	return 0;

@@ -64,9 +64,15 @@ void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 	z_sched_prio_deadline_set_64(thread, deadline);
 }
 	
+
+
 void z_impl_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
-	deadline = clamp(deadline, 0, UINT64_MAX);
+/*
+Assumption is deadline  or newdl never hit the maximum value of 2^62 
+*/
+
+	deadline = clamp(deadline, 0, INT64_MAX/2);
 	uint64_t newdl = k_cycle_get_64() + deadline;
 	z_impl_k_thread_absolute_deadline_set_64(tid, newdl);
 }
