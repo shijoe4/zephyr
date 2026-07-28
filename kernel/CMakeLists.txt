@@ -98,6 +98,7 @@ kernel_sources_ifdef(CONFIG_MULTITHREADING
   sleep.c
   pipe.c
   scheduler.c
+  mutex_ceiling_floor.c
   )
 
 if(CONFIG_MULTITHREADING)

@@ -35,13 +35,13 @@ struct k_thread thread_1_data, thread_2_data;
 void thread_1_entry(void *p1, void *p2, void *p3) {
     LOG_DBG("thread_1: Started\n");
    
-	   k_thread_deadline_set(&thread_1_data,INT32_MAX/2);
+	   k_thread_deadline_set(&thread_1_data,UINT32_MAX);
 	   k_reschedule(); 
   
       LOG_DBG("thread_1: Started with deadline %" PRId64 " ticks\n", _current->base.prio_deadline);
 
 
-volatile uint32_t count = INT32_MAX; // Large value to simulate work
+volatile uint32_t count = UINT32_MAX; // Large value to simulate work
     while (count > 0) {
         count--; 
     }
@@ -58,7 +58,7 @@ volatile uint32_t count = INT32_MAX; // Large value to simulate work
 void thread_2_entry(void *p1, void *p2, void *p3) {
     LOG_DBG("thread_2: Started\n");
    
-	   k_thread_deadline_set(&thread_2_data,INT32_MAX);
+	   k_thread_deadline_set(&thread_2_data,UINT32_MAX);
 	   k_reschedule(); 
   
       LOG_DBG("thread_2: Started with deadline %" PRId64 " ticks\n", _current->base.prio_deadline);
@@ -80,18 +80,6 @@ void thread_2_entry(void *p1, void *p2, void *p3) {
 
 int main(void) {
 
-
-    const struct device *const dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
-    uint32_t dtr = 0;
-
-    /* Wait for host terminal to open (DTR line set) */
-    // while (!dtr) {
-    //     uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
-    //     k_msleep(100);
-    // }
-
-    LOG_INF("*** Booting Zephyr OS ***");
-    LOG_INF("Terminal connected, starting app!");
   
 LOG_DBG("Main: start\n");
 
@@ -126,7 +114,7 @@ LOG_DBG("Main: start\n");
     k_thread_join(thread2_pointer, K_FOREVER);
 
     while (1) {
-        k_msleep(1000); // Keep main thread alive
+        k_msleep(K_FOREVER); // Keep main thread alive
     }
 
 
