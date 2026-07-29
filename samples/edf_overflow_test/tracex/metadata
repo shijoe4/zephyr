@@ -17,11 +17,6 @@ trace {
 	minor = 8;
 	byte_order = le;
 };
-clock {
-    name = "main_clk";
-    freq = 12000000; /* Set to 12 MHz */
-};
-
 
 
 stream {

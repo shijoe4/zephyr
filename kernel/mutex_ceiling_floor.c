@@ -202,6 +202,7 @@ int z_impl_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex, int r
     struct ceiling_floor_mutex_owner current_mutex_owner;
      current_mutex_owner.owner = NULL;
      current_mutex_owner.ceiling_prio = INT_MAX; 
+    
      #ifdef CONFIG_SCHED_DEADLINE
      current_mutex_owner.floor_prio = INT64_MAX;
     #endif
@@ -472,8 +473,9 @@ int z_impl_k_mutex_ceiling_floor_unlock(struct k_mutex_ceiling_floor *mutex)
    
     k_spinlock_key_t key = k_spin_lock(&lock);
 
+    #ifdef CONFIG_SCHED_DEADLINE
    LOG_DBG("deadline value of the mutex %lld\n", mutex->owner_original_floor_prio);
-
+    #endif
     struct ceiling_floor_mutex_owner current_mutex_owner ;
 
     LOG_DBG("Entering unlock mutex %p thread name: %s\n", mutex, k_thread_name_get(k_current_get()));
@@ -503,8 +505,6 @@ SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, unlock, mutex);
            
        if(pop_mutex_owner(&current_mutex_owner))
        {
-            
-
                 current_mutex_owner.owner = NULL;
                 current_mutex_owner.ceiling_prio = INT_MAX;
                 #ifdef CONFIG_SCHED_DEADLINE
@@ -532,7 +532,7 @@ SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, unlock, mutex);
              LOG_DBG("looking for new owner of mutex %p \n", mutex);
 
             bool reschedule_needed=false;
-            new_owner = z_unpend_first_thread(&wait_q_mutex_ceiling_floor);
+            new_owner = z_unpend_first_thread_locked(&wait_q_mutex_ceiling_floor);
            if(new_owner != NULL)
            {
 
@@ -589,7 +589,7 @@ SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, unlock, mutex);
 
 int z_impl_k_mutex_ceiling_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling)
 {
-    return z_impl_k_mutex_ceiling_floor_init(mutex, resource_ceiling,UINT64_MAX);
+    return z_impl_k_mutex_ceiling_floor_init(mutex, resource_ceiling,INT64_MAX);
 
 }
 

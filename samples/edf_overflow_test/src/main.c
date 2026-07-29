@@ -114,7 +114,7 @@ LOG_DBG("Main: start\n");
     k_thread_join(thread2_pointer, K_FOREVER);
 
     while (1) {
-        k_msleep(K_FOREVER); // Keep main thread alive
+        k_msleep(1000); // Keep main thread alive
     }
 
 

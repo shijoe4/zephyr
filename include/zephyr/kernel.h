@@ -110,6 +110,7 @@ BUILD_ASSERT(sizeof(intptr_t) == sizeof(long));
 #define Z_DECL_POLL_EVENT
 #endif
 
+struct k_mutex_ceiling_floor;
 struct k_thread;
 struct k_mutex;
 struct k_sem;
@@ -3650,6 +3651,63 @@ __syscall int k_mutex_lock(struct k_mutex *mutex, k_timeout_t timeout);
  *
  */
 __syscall int k_mutex_unlock(struct k_mutex *mutex);
+
+
+/**
+ * @}
+ */
+
+/*
+adding new mutex api to
+*/
+
+
+
+struct k_mutex_ceiling_floor {
+   // use lock to access it
+   // the ceiling of the resource protected by this mutex interger value
+    int resource_ceiling;
+    // the floor of the resource protected by this mutex interger value
+    int64_t resource_floor;
+
+    /** Mutex wait queue */
+	 _wait_q_t wait_q;
+	/** Mutex owner */
+	struct k_thread *owner;
+
+	/** Current lock count */
+	uint32_t lock_count;
+
+	/** Original thread priority */
+	int owner_orig_prio;
+    int owner_ceiling_prio;
+    int64_t owner_original_floor_prio;
+    int64_t owner_floor_prio;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_mutex_ceiling_floor);
+
+#ifdef CONFIG_OBJ_CORE_MUTEX
+	struct k_obj_core obj_core;
+#endif
+
+
+};
+
+
+__syscall int k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling, int64_t resource_floor);
+
+__syscall int k_mutex_ceiling_floor_lock(struct k_mutex_ceiling_floor *mutex, k_timeout_t timeout);
+
+__syscall int k_mutex_ceiling_floor_unlock(struct k_mutex_ceiling_floor *mutex);
+
+
+__syscall int k_mutex_ceiling_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling);
+
+__syscall int k_mutex_ceiling_lock(struct k_mutex_ceiling_floor *mutex, k_timeout_t timeout);
+
+__syscall int k_mutex_ceiling_unlock(struct k_mutex_ceiling_floor *mutex);
+
+
 
 /**
  * @}
