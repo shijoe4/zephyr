@@ -68,6 +68,21 @@ extern "C" {
 #define sys_port_trace_k_thread_sched_abort(thread)  sys_trace_k_thread_sched_abort(thread)
 #define sys_port_trace_k_thread_sched_priority_set(thread, prio)                                   \
 	sys_trace_k_thread_sched_priority_set(thread, prio)
+
+#ifdef CONFIG_SHED_DEADLINE	
+#define sys_port_trace_k_thread_deadline_set(thread, deadline)                                   \
+	sys_trace_k_thread_deadline_set(thread, deadline)	
+
+#define sys_port_trace_k_thread_absolute_deadline_set(thread, deadline)                                   \
+	sys_trace_k_thread_absolute_deadline_set(thread, deadline)	
+
+#define sys_port_trace_k_thread_sched_deadline_set(thread, deadline)                                   \
+	sys_trace_k_thread_sched_deadline_set(thread, deadline)	
+
+#define sys_port_trace_k_thread_sched_absolute_deadline_set(thread, deadline)                                   \
+	sys_trace_k_thread_sched_absolute_deadline_set(thread, deadline)		
+#endif	
+
 #define sys_port_trace_k_thread_sched_ready(thread) sys_trace_k_thread_sched_ready(thread)
 
 #define sys_port_trace_k_thread_sched_pend(thread) sys_trace_k_thread_sched_pend(thread)
@@ -186,6 +201,23 @@ extern "C" {
 	sys_trace_k_mutex_lock_exit(mutex, timeout, ret)
 #define sys_port_trace_k_mutex_unlock_enter(mutex)     sys_trace_k_mutex_unlock_enter(mutex)
 #define sys_port_trace_k_mutex_unlock_exit(mutex, ret) sys_trace_k_mutex_unlock_exit(mutex, ret)
+
+/* Mutex Ceiling Floor */
+
+#define sys_port_trace_k_mutex_ceiling_floor_init(mutex, ceiling, floor, ret) \
+	sys_trace_k_mutex_ceiling_floor_init(mutex, ceiling, floor, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_enter(mutex, timeout)                                          \
+	sys_trace_k_mutex_ceiling_floor_lock_enter(mutex, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_blocking(mutex, timeout)                                       \
+	sys_trace_k_mutex_ceiling_floor_lock_blocking(mutex, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_exit(mutex, timeout, ret)                                      \
+	sys_trace_k_mutex_ceiling_floor_lock_exit(mutex, timeout, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_enter(mutex)    \
+ 	sys_trace_k_mutex_ceiling_floor_unlock_enter(mutex)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_exit(mutex, ret) \
+ 	sys_trace_k_mutex_ceiling_floor_unlock_exit(mutex, ret)
+
+
 
 /* Timer */
 #define sys_port_trace_k_timer_init(timer) sys_trace_k_timer_init(timer)
@@ -321,6 +353,10 @@ void sys_trace_k_thread_wakeup(struct k_thread *thread);
 void sys_trace_k_thread_abort(struct k_thread *thread);
 void sys_trace_k_thread_start(struct k_thread *thread);
 void sys_trace_k_thread_priority_set(struct k_thread *thread);
+#ifdef CONFIG_SHED_DEADLINE
+void sys_trace_k_thread_absolute_deadline_set(struct k_thread *thread, int64_t deadline);
+void sys_trace_k_thread_deadline_set(struct k_thread *thread, int64_t deadline);
+#endif
 void sys_trace_k_thread_suspend(struct k_thread *thread);
 void sys_trace_k_thread_resume(struct k_thread *thread);
 void sys_trace_k_thread_sched_lock(void);
@@ -337,6 +373,10 @@ void sys_trace_k_thread_suspend_exit(struct k_thread *thread);
 void sys_trace_k_thread_sched_wakeup(struct k_thread *thread);
 void sys_trace_k_thread_sched_abort(struct k_thread *thread);
 void sys_trace_k_thread_sched_priority_set(struct k_thread *thread, int prio);
+#ifdef CONFIG_SHED_DEADLINE
+void sys_trace_k_thread_sched_deadline_set(struct k_thread *thread, int64_t deadline);
+void sys_trace_k_thread_sched_absolute_deadline_set(struct k_thread *thread, int64_t deadline);
+#endif
 void sys_trace_k_thread_sched_ready(struct k_thread *thread);
 void sys_trace_k_thread_sched_pend(struct k_thread *thread);
 void sys_trace_k_thread_sched_resume(struct k_thread *thread);

@@ -354,6 +354,20 @@ typedef enum {
 	CTF_EVENT_SYS_INIT_ENTER = 0x104,
 	CTF_EVENT_SYS_INIT_EXIT = 0x105,
 
+	CTF_EVENT_MUTEX_CEILING_FLOOR_INIT = 0x106,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_ENTER = 0x107,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_BLOCKING = 0x108,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_EXIT = 0x109,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_ENTER = 0x10A,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_EXIT = 0x10B,
+
+	
+	CTF_EVENT_THREAD_DEADLINE_SET = 0x10C,
+	CTF_EVENT_THREAD_ABSOLUTE_DEADLINE_SET = 0x10D,
+	CTF_EVENT_THREAD_SCHED_DEADLINE_SET = 0x10E,
+	CTF_EVENT_THREAD_SCHED_ABSOLUTE_DEADLINE_SET = 0x10F,
+
+
 } ctf_event_t;
 
 typedef struct {
@@ -375,6 +389,22 @@ static inline void ctf_top_thread_priority_set(uint32_t thread_id, int8_t prio,
 {
 	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_PRIORITY_SET), thread_id, name, prio);
 }
+
+#ifdef CONFIG_SHED_DEADLINE
+static inline void ctf_top_thread_deadline_set(uint32_t thread_id, int64_t deadline,
+					       ctf_bounded_string_t name)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_DEADLINE_SET), thread_id, name, deadline);
+}
+
+static inline void ctf_top_thread_absolute_deadline_set(uint32_t thread_id, int64_t deadline,
+						       ctf_bounded_string_t name)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_ABSOLUTE_DEADLINE_SET), thread_id, name, deadline);
+}
+
+#endif
+
 
 static inline void ctf_top_thread_sleep_enter(uint32_t timeout)
 {
@@ -1102,6 +1132,49 @@ static inline void ctf_top_mutex_unlock_exit(uint32_t mutex_id, int32_t ret)
 {
 	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_UNLOCK_EXIT), mutex_id, ret);
 }
+
+
+
+
+/*new mutex functions*/
+
+
+
+static inline void ctf_top_mutex_ceiling_floor_init(uint32_t mutex_id,int ceiling, int64_t floor, int ret)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_INIT), mutex_id, ceiling, floor, ret);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_lock_enter(uint32_t mutex_id, uint32_t timeout)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_ENTER), mutex_id, timeout);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_lock_blocking(uint32_t mutex_id, uint32_t timeout)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_BLOCKING), mutex_id, timeout);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_lock_exit(uint32_t mutex_id, uint32_t timeout, int32_t ret)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_EXIT), mutex_id, timeout, ret);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_unlock_enter(uint32_t mutex_id)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_ENTER), mutex_id);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_unlock_exit(uint32_t mutex_id, int32_t ret)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_EXIT), mutex_id, ret);
+}
+
+
+
+
+
+
 
 /* Timer */
 static inline void ctf_top_timer_init(uint32_t timer)

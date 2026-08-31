@@ -496,6 +496,29 @@ void sys_trace_k_mutex_unlock_exit_user(struct k_mutex *mutex, int ret);
 #define sys_port_trace_k_mutex_unlock_enter(mutex) sys_trace_k_mutex_unlock_enter(mutex)
 #define sys_port_trace_k_mutex_unlock_exit(mutex, ret) sys_trace_k_mutex_unlock_exit(mutex, ret)
 
+/* add new mutex  */
+
+#define sys_port_trace_k_mutex_ceiling_floor_init(mutex,ceiling,floor, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_enter(mutex, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_blocking(mutex, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_exit(mutex, timeout, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_enter(mutex)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_exit(mutex, ret)
+
+#define sys_port_trace_k_mutex_ceiling_floor_init(mutex, ret) sys_trace_k_mutex_ceiling_floor_init(mutex,ceiling,floor, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_blocking(mutex, timeout)                                       \
+	sys_trace_k_mutex_ceiling_floor_lock_blocking(mutex, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_enter(mutex, timeout)                                          \
+	sys_trace_k_mutex_ceiling_floor_lock_enter(mutex, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_exit(mutex, timeout, ret)                                      \
+	sys_trace_k_mutex_ceiling_floor_lock_exit(mutex, timeout, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_enter(mutex) sys_trace_k_mutex_ceiling_floor_unlock_enter(mutex)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_exit(mutex, ret) sys_trace_k_mutex_ceiling_floor_unlock_exit(mutex, ret)
+
+
+
+
+
 /* k_poll */
 void sys_trace_k_poll_api_event_init(struct k_poll_event *event);
 void sys_trace_k_poll_api_event_init_user(struct k_poll_event *event);

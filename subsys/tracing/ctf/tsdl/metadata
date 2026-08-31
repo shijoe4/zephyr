@@ -2250,3 +2250,105 @@ event {
 		int32_t result;
 	};
 };
+
+
+
+event {
+	name = mutex_ceiling_floor_init;
+	id = 0x106;
+	fields := struct {
+		uint32_t id;
+		uint32_t celling;
+		uint64_t floor;
+		int32_t ret;
+	};
+};
+
+event {
+	name = mutex_ceiling_floor_lock_enter;
+	id = 0x107;
+	fields := struct {
+		uint32_t id;
+		uint32_t timeout;
+	};
+};
+
+event {
+	name = mutex_ceiling_floor_lock_blocking;
+	id = 0x108;
+	fields := struct {
+		uint32_t id;
+		uint32_t timeout;
+	};
+};
+
+event {
+	name = mutex_ceiling_floor_lock_exit;
+	id = 0x109;
+	fields := struct {
+		uint32_t id;
+		uint32_t timeout;
+		int32_t ret;
+	};
+};
+
+event {
+	name = mutex_ceiling_floor_unlock_enter;
+	id = 0x10A;
+	fields := struct {
+		uint32_t id;
+	};
+};
+
+event {
+	name = mutex_ceiling_floor_unlock_exit;
+	id = 0x10B;
+	fields := struct {
+		uint32_t id;
+		int32_t ret;
+	};
+};
+
+
+event {
+	name = thread_deadline_set;
+	id = 0x10C;
+	fields := struct {
+		uint32_t thread_id;
+		ctf_bounded_string_t name[20];
+		uint64_t deadline;
+	};
+
+};
+
+event {
+	name = thread_absolute_deadline_set;
+	id = 0x10D;
+	fields := struct {
+		uint32_t thread_id;
+		ctf_bounded_string_t name[20];
+		uint64_t deadline;
+	};
+
+};
+
+event {
+	name = thread_sched_deadline_set;
+	id = 0x10E;
+	fields := struct {
+		uint32_t thread_id;
+		uint64_t deadline;
+		ctf_bounded_string_t name[20];
+	};
+};
+
+event {
+	name = thread_sched_absolute_deadline_set;
+	id = 0x10F;
+	fields := struct {
+		uint32_t thread_id;
+		uint64_t deadline;
+		ctf_bounded_string_t name[20];
+	};
+};
+
