@@ -17,6 +17,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <kspinlock.h>
 #include <ksched.h>
 #include <run_q.h>
 #include <zephyr/internal/syscall_handler.h>
@@ -30,7 +31,8 @@
  *
  * If the thread is currently queued the scheduler re-inserts it so that
  * run-queue ordering (including rbtree invariants) is preserved.  May be
- * called from any context; takes and releases _sched_spinlock internally.
+ * called from any context; takes and releases the scheduler's spinlock
+ * internally.
  *
  * @param thread   Thread whose deadline is being updated.
  * @param deadline New absolute deadline value (raw cycle counter).
@@ -38,7 +40,7 @@
 
 void z_sched_prio_deadline_set_64(struct k_thread *thread, uint64_t deadline)
 {
-	K_SPINLOCK(&_sched_spinlock) {
+	Z_SCHED_SPINLOCK {
 		if (z_is_thread_queued(thread)) {
 			dequeue_thread(thread);
 			thread->base.prio_deadline = deadline;

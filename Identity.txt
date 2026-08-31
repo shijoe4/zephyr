@@ -1,0 +1,4 @@
+See https://docs.zephyrproject.org/latest/contribute/guidelines.html#commit-guidelines for more details.
+
+ 8a2fb0fb099da7ac370786addd07f3d68fa49702: Empty commit message body
+8a2fb0fb099da7ac370786addd07f3d68fa49702: Missing signed-off-by line

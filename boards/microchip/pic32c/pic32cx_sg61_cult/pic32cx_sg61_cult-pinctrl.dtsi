@@ -61,4 +61,32 @@
 				 <PA5B_DAC_VOUT1>;	/* J600 pin 3 */
 		};
 	};
+
+	sercom0_spi_default: sercom0_spi_default {
+		group1 {
+			pinmux = <PB24C_SERCOM0_PAD0>,
+				 <PC25C_SERCOM0_PAD3>,
+				 <PB25C_SERCOM0_PAD1>;
+		};
+	};
+
+	mdio_default: mdio_default {
+		group1 {
+			pinmux = <PC22L_GMAC_GMDC>,
+				 <PC23L_GMAC_GMDIO>;
+		};
+	};
+
+	gmac_rmii: gmac_rmii {
+		group1 {
+			pinmux = <PA14L_GMAC_GTXCK>,
+				 <PA17L_GMAC_GTXEN>,
+				 <PA18L_GMAC_GTX0>,
+				 <PA19L_GMAC_GTX1>,
+				 <PC20L_GMAC_GRXDV>,
+				 <PA13L_GMAC_GRX0>,
+				 <PA12L_GMAC_GRX1>,
+				 <PA15L_GMAC_GRXER>;
+		};
+	};
 };

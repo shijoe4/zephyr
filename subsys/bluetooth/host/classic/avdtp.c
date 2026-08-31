@@ -20,8 +20,8 @@
 #include <zephyr/bluetooth/l2cap.h>
 #include <zephyr/bluetooth/classic/avdtp.h>
 
-#include "host/hci_core.h"
-#include "host/conn_internal.h"
+#include <host/hci_core.h>
+#include <host/conn_internal.h>
 #include "l2cap_br_internal.h"
 #include "avdtp_internal.h"
 
@@ -387,7 +387,7 @@ static void avdtp_tx_raise(void)
 {
 	if (!sys_slist_is_empty(&avdtp_tx_list)) {
 		LOG_DBG("kick TX");
-		k_work_submit(&avdtp_tx_work);
+		bt_work_submit(&avdtp_tx_work);
 	}
 }
 
@@ -1747,10 +1747,8 @@ static int avdtp_send_cmd(struct bt_avdtp *session, struct net_buf *buf, struct 
 
 	avdtp_send_common(session, buf);
 
-	/* Initialize and start timeout timer */
-	k_work_init_delayable(&session->timeout_work, avdtp_timeout);
 	/* Start timeout work */
-	k_work_reschedule(&session->timeout_work, AVDTP_TIMEOUT);
+	bt_work_reschedule(&session->timeout_work, AVDTP_TIMEOUT);
 
 	return 0;
 }
@@ -1820,6 +1818,8 @@ void bt_avdtp_l2cap_disconnected(struct bt_l2cap_chan *chan)
 	struct bt_avdtp *session = AVDTP_CHAN(chan);
 
 	LOG_DBG("chan %p session %p", chan, session);
+
+	k_work_cancel_delayable(&session->timeout_work);
 
 	/* Clear the Pending req if set*/
 	if (session->req) {
@@ -2145,13 +2145,17 @@ int bt_avdtp_connect(struct bt_conn *conn, struct bt_avdtp *session)
 		return -ENOMEM;
 	}
 
+	/* Locking semaphore initialized to 1 (unlocked). It has to be
+	 * initialized before the session is published, since the session
+	 * memory is owned and cleared by the upper layer.
+	 */
+	k_sem_init(&session->sem_lock, 1, 1);
 	session->br_chan.chan.conn = conn;
 	bt_avdtp_clear_tx(session);
 	k_sem_give(&avdtp_sem_lock);
 
-	/* Locking semaphore initialized to 1 (unlocked) */
-	k_sem_init(&session->sem_lock, 1, 1);
 	k_work_init(&session->_release_work, avdtp_release_work);
+	k_work_init_delayable(&session->timeout_work, avdtp_timeout);
 	session->br_chan.rx.mtu = BT_L2CAP_RX_MTU;
 	session->br_chan.chan.ops = &signal_chan_ops;
 	session->br_chan.required_sec_level = BT_SECURITY_L2;
@@ -2208,12 +2212,17 @@ int bt_avdtp_l2cap_accept(struct bt_conn *conn, struct bt_l2cap_server *server,
 	k_sem_take(&avdtp_sem_lock, K_FOREVER);
 
 	if (session->br_chan.chan.conn == NULL) {
+		/* Locking semaphore initialized to 1 (unlocked). It has to be
+		 * initialized before the session is published, since the
+		 * session memory is owned and cleared by the upper layer.
+		 */
+		k_sem_init(&session->sem_lock, 1, 1);
 		session->br_chan.chan.conn = conn;
 		bt_avdtp_clear_tx(session);
 		k_sem_give(&avdtp_sem_lock);
-		/* Locking semaphore initialized to 1 (unlocked) */
-		k_sem_init(&session->sem_lock, 1, 1);
+
 		k_work_init(&session->_release_work, avdtp_release_work);
+		k_work_init_delayable(&session->timeout_work, avdtp_timeout);
 		session->br_chan.chan.ops = &signal_chan_ops;
 		session->br_chan.rx.mtu = BT_L2CAP_RX_MTU;
 		*chan = &session->br_chan.chan;
@@ -2239,7 +2248,18 @@ int bt_avdtp_l2cap_accept(struct bt_conn *conn, struct bt_l2cap_server *server,
 /* Application will register its callback */
 int bt_avdtp_register(struct bt_avdtp_event_cb *cb)
 {
+	int err;
+	static struct bt_l2cap_server avdtp_l2cap = {
+		.psm = BT_L2CAP_PSM_AVDTP,
+		.sec_level = BT_SECURITY_L2,
+		.accept = bt_avdtp_l2cap_accept,
+	};
+
 	LOG_DBG("");
+
+	if (cb == NULL) {
+		return -EINVAL;
+	}
 
 	if (event_cb == cb) {
 		return -EALREADY;
@@ -2250,6 +2270,14 @@ int bt_avdtp_register(struct bt_avdtp_event_cb *cb)
 	}
 
 	event_cb = cb;
+
+	/* Register AVDTP PSM with L2CAP */
+	err = bt_l2cap_br_server_register(&avdtp_l2cap);
+	if ((err < 0) && (err != -EEXIST)) {
+		event_cb = NULL;
+		LOG_ERR("AVDTP L2CAP Registration failed %d", err);
+		return err;
+	}
 
 	return 0;
 }
@@ -2283,40 +2311,16 @@ int bt_avdtp_register_sep(uint8_t media_type, uint8_t sep_type, struct bt_avdtp_
 	/* Locking semaphore initialized to 1 (unlocked) */
 	k_sem_init(&sep->sem_lock, 1, 1);
 	k_work_init_delayable(&sep->_delay_work, avdtp_media_disconnect_work);
-	bt_avdtp_set_state_lock(sep, AVDTP_IDLE);
+	/* The endpoint is not in the `seps` list yet, so it cannot be accessed
+	 * by any other context. Set the state without taking `sep->sem_lock`,
+	 * which would invert the lock order used by the command handlers.
+	 */
+	bt_avdtp_set_state(sep, AVDTP_IDLE);
 
 	sys_slist_append(&seps, &sep->_node);
 	k_sem_give(&avdtp_sem_lock);
 
 	return 0;
-}
-
-/* init function */
-void bt_avdtp_init(void)
-{
-	int err;
-
-	static bool initialized;
-	static struct bt_l2cap_server avdtp_l2cap = {
-		.psm = BT_L2CAP_PSM_AVDTP,
-		.sec_level = BT_SECURITY_L2,
-		.accept = bt_avdtp_l2cap_accept,
-	};
-
-	LOG_DBG("");
-
-	if (initialized) {
-		return;
-	}
-
-	/* Register AVDTP PSM with L2CAP */
-	err = bt_l2cap_br_server_register(&avdtp_l2cap);
-	if ((err < 0) && (err != -EEXIST)) {
-		LOG_ERR("AVDTP L2CAP Registration failed %d", err);
-		return;
-	}
-
-	initialized = true;
 }
 
 /* AVDTP Discover Request */
