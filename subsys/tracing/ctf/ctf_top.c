@@ -100,7 +100,7 @@ void sys_trace_k_thread_absolute_deadline_set(struct k_thread *thread, int64_t d
 }
 #endif
 
-void sys_trace_k_thread_sleep_enter(k_timeout_t timeout)
+// void sys_trace_k_thread_sleep_enter(k_timeout_t timeout);
 void sys_trace_k_thread_sleep_ticks_enter(k_timeout_t timeout)
 {
 	ctf_top_thread_sleep_ticks_enter(k_ticks_to_us_floor32((uint32_t)timeout.ticks));

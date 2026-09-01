@@ -51,6 +51,9 @@
 #define K_OBJ_TYPE_MSGQ_ID       K_OBJ_TYPE_ID_GEN("MSGQ")
 /** Mutex object type */
 #define K_OBJ_TYPE_MUTEX_ID      K_OBJ_TYPE_ID_GEN("MUTX")
+
+/** Mutex ceiling_floorobject type */
+#define K_OBJ_TYPE_MUTEX_CEILING_FLOOR_ID      K_OBJ_TYPE_ID_GEN("MUTX_CEILING_FLOOR")
 /** Pipe object type */
 #define K_OBJ_TYPE_PIPE_ID       K_OBJ_TYPE_ID_GEN("PIPE")
 /** Semaphore object type */

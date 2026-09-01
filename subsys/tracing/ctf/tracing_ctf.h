@@ -515,6 +515,14 @@ void sys_trace_k_mutex_lock_exit(struct k_mutex *mutex, k_timeout_t timeout, int
 void sys_trace_k_mutex_unlock_enter(struct k_mutex *mutex);
 void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret);
 
+void sys_trace_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ceiling, int64_t floor, int ret);
+void sys_trace_k_mutex_ceiling_floor_lock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout);
+void sys_trace_k_mutex_ceiling_floor_lock_blocking(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout);
+void sys_trace_k_mutex_ceiling_floor_lock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout, int ret);
+void sys_trace_k_mutex_ceiling_floor_unlock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor);
+void sys_trace_k_mutex_ceiling_floor_unlock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ret);
+
+
 /* Timer */
 void sys_trace_k_timer_init(struct k_timer *timer);
 

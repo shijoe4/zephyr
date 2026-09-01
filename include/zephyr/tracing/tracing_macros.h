@@ -111,6 +111,11 @@
 	#define sys_port_trace_type_mask_k_mutex(trace_call)
 #endif
 
+#if defined(CONFIG_TRACING_MUTEX_CEILING_FLOOR)
+        #define sys_port_trace_type_mask_k_mutex_ceiling_floor(trace_call) trace_call
+#else
+        #define sys_port_trace_type_mask_k_mutex_ceiling_floor(trace_call)
+#endif
 #if defined(CONFIG_TRACING_CONDVAR)
 	#define sys_port_trace_type_mask_k_condvar(trace_call) trace_call
 #else

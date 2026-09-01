@@ -28,6 +28,7 @@
  * - @ref _track_list_k_mem_slab
  * - @ref _track_list_k_sem
  * - @ref _track_list_k_mutex
+ * - @ref _track_list_k_mutex_ceiling_floor
  * - @ref _track_list_k_stack
  * - @ref _track_list_k_msgq
  * - @ref _track_list_k_mbox
@@ -52,6 +53,8 @@ extern struct k_mem_slab *_track_list_k_mem_slab;
 extern struct k_sem *_track_list_k_sem;
 /** @brief Head of the tracking list for k_mutex objects. */
 extern struct k_mutex *_track_list_k_mutex;
+/** @brief Head of the tracking list for k_mutex_ceiling_floor objects. */
+extern struct k_mutex_ceiling_floor *_track_list_k_mutex_ceiling_floor;
 /** @brief Head of the tracking list for k_stack objects. */
 extern struct k_stack *_track_list_k_stack;
 /** @brief Head of the tracking list for k_msgq objects. */
@@ -84,6 +87,8 @@ extern struct k_event *_track_list_k_event;
 #define sys_port_track_k_work_init(work)
 #define sys_port_track_k_mutex_init(mutex, ret) \
 	sys_track_k_mutex_init(mutex)
+#define sys_port_track_k_mutex_ceiling_floor_init(mutex_ceiling_floor, ceiling, floor, ret) \
+        sys_track_k_mutex_ceiling_floor_init(mutex_ceiling_floor, ceiling, floor, ret)
 #define sys_port_track_k_timer_stop(timer)
 #define sys_port_track_k_timer_start(timer, duration, period)
 #define sys_port_track_k_timer_init(timer) \
@@ -122,6 +127,8 @@ void sys_track_k_timer_init(struct k_timer *timer);
 void sys_track_k_mem_slab_init(struct k_mem_slab *slab);
 void sys_track_k_sem_init(struct k_sem *sem);
 void sys_track_k_mutex_init(struct k_mutex *mutex);
+void sys_track_k_mutex_init(struct k_mutex *mutex);
+void sys_track_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ceiling, int64_t floor, int ret);
 void sys_track_k_stack_init(struct k_stack *stack);
 void sys_track_k_msgq_init(struct k_msgq *msgq);
 void sys_track_k_mbox_init(struct k_mbox *mbox);
@@ -145,6 +152,7 @@ void sys_track_socket_init(int sock, int family, int type, int proto);
 #define sys_port_track_k_work_queue_init(queue)
 #define sys_port_track_k_work_init(work)
 #define sys_port_track_k_mutex_init(mutex, ret)
+#define sys_port_track_k_mutex_ceiling_floor_init(mutex_ceiling_floor, ceiling, floor, ret)
 #define sys_port_track_k_timer_stop(timer)
 #define sys_port_track_k_timer_start(timer, duration, period)
 #define sys_port_track_k_timer_init(timer)
