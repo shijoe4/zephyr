@@ -5,10 +5,24 @@
  */
 
 #include <stdio.h>
-
+#include <stdint.h>
+#include <zephyr/kernel.h>
+	
 int main(void)
 {
-	printf("Hello World! %s\n", CONFIG_BOARD_TARGET);
+volatile uint64_t k=0;
+
+	while (1) {
+
+		k++;
+	
+	//   k_sleep_ticks(K_MSEC(100));
+
+
+	     k_sleep(K_MSEC(100));
+
+		printk("Hello World! %lld\n", k);
+	}
 
 	return 0;
 }

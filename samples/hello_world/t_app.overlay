@@ -1,0 +1,9 @@
+/ {
+    chosen {
+        zephyr,console,tracing-uart = &usb_serial;
+    };
+};
+
+&usb_serial {
+    status = "okay";
+};
