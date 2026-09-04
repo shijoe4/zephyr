@@ -248,6 +248,10 @@ Removed APIs and options
     * ``CONFIG_CTR_DRBG_CSPRNG_GENERATOR``
     * ``CONFIG_CS_CTR_DRBG_PERSONALIZATION``
 
+* Shell
+
+    * ``kernel log_level``, replaced by ``log enable``
+
 * SPI
 
     * The optional delay argument of :c:macro:`SPI_CONFIG_DT`, :c:macro:`SPI_CONFIG_DT_INST`,
@@ -608,6 +612,10 @@ New APIs and options
 
   * :c:struct:`sys_ringq` (see :ref:`fixed_size_ringq_api`)
 
+* USB Type-C
+
+  * :kconfig:option:`CONFIG_USBC_LOG_PD_MSG_NAMES`
+
 * Zbus
 
   * :kconfig:option:`CONFIG_ZBUS_RUNTIME_CHANNEL_REGISTRATION`
@@ -889,6 +897,7 @@ New Boards
 * Silicon Laboratories
 
   * :zephyr:board:`kg100s_rb4332a` (``kg100s_rb4332a``)
+  * :zephyr:board:`siwx917_ek2708a` (``siwx917_ek2708a``)
   * :zephyr:board:`xg26_dk2608a` (``xg26_dk2608a``)
   * :zephyr:board:`xg26_rb4121a` (``xg26_rb4121a``)
 
@@ -1473,6 +1482,12 @@ New Drivers
   * :dtcompatible:`nxp,trgmux` (:github:`112088`)
 
 * Networking
+
+  * gPTP
+
+    * :kconfig:option:`CONFIG_NET_GPTP_STATIC_TIME_RECEIVER` operates the node as a
+      statically configured time receiver, so it can synchronize through IEEE 802.1AS
+      automotive profile bridges that transmit no Announce messages.
 
   * :dtcompatible:`st,stm32wba-radio` (:github:`110546`)
 
