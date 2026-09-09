@@ -131,7 +131,7 @@ static int tracing_init(void)
 	k_thread_create(&tracing_thread, tracing_thread_stack,
 			K_THREAD_STACK_SIZEOF(tracing_thread_stack),
 			tracing_thread_func, NULL, NULL, NULL,
-			CONFIG_TRACING_INIT_PRIORITY, 0, K_NO_WAIT);
+			-1, 0, K_NO_WAIT);
 	k_thread_name_set(&tracing_thread, TRACING_THREAD_NAME);
 #endif
 

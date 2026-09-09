@@ -1,6 +1,6 @@
 / {
     chosen {
-        zephyr,console,tracing-uart = &usb_serial;
+        zephyr,tracing-uart = &usb_serial;
     };
 };
 

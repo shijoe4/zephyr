@@ -21,7 +21,6 @@ volatile uint64_t k=0;
 
 	     k_sleep(K_MSEC(100));
 
-		printk("Hello World! %lld\n", k);
 	}
 
 	return 0;

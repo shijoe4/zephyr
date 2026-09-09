@@ -1,6 +1,6 @@
 / {
     chosen {
-        zephyr,console,tracing-uart = &uart0;
+        zephyr,tracing-uart = &uart0;
     };
 };
 

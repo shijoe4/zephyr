@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <assert.h>
+#include<limits.h>
 
 #define STACK_SIZE 2048
 #define LOOP 1
@@ -82,11 +83,14 @@ void thread_3_entry(void *p1, void *p2, void *p3) {
  while(count<LOOP)
  {
 
-  next_run += k_ms_to_ticks_ceil64(50);
+  next_run += k_ms_to_ticks_ceil64(100);
 
    if(k_mutex_ceiling_lock(&shared_mutex1, K_FOREVER)==0){
 
            counter1++;
+    
+      k_busy_wait(10000);        
+           
 
          k_mutex_ceiling_unlock(&shared_mutex1);
     }
@@ -117,9 +121,9 @@ int main(void) {
 thread1_pointer= k_thread_create(&thread_1_data, stack_1, STACK_SIZE, thread_1_entry, 
                     NULL, NULL, NULL, 50, 0, K_FOREVER);
  thread2_pointer= k_thread_create(&thread_2_data, stack_2, STACK_SIZE, thread_2_entry, 
-                    NULL, NULL, NULL, 70, 0, K_FOREVER);
- thread3_pointer =k_thread_create(&thread_3_data, stack_3, STACK_SIZE, thread_3_entry, 
                     NULL, NULL, NULL, 60, 0, K_FOREVER);
+ thread3_pointer =k_thread_create(&thread_3_data, stack_3, STACK_SIZE, thread_3_entry, 
+                    NULL, NULL, NULL, 70, 0, K_FOREVER);
 
                     
 
@@ -130,12 +134,14 @@ k_thread_name_set(thread3_pointer,"therad_3");
 
 
 
-
+ k_thread_start(&thread_3_data);  
+ k_sleep(K_TICKS(1));
+     k_thread_start(&thread_2_data);
+     
+k_sleep(K_TICKS(1));
 k_thread_start(&thread_1_data);
-k_sleep(K_TICKS(1));
-    k_thread_start(&thread_2_data);
-k_sleep(K_TICKS(1));
-     k_thread_start(&thread_3_data);  
+
+    
  
 
  k_thread_join(thread1_pointer, K_FOREVER);
