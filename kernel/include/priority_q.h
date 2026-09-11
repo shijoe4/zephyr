@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+ /*
+ *  Copyright (c) 2026 Instituto Superior de Engenharia do Porto (ISEP)
+ *  SPDX-License-Identifier: Apache-2.0
+ * These copyright is only for new changes made to the file for implementing the priority ceiling/floor mutex with deadline floor.
+ */
+
 #ifndef ZEPHYR_KERNEL_INCLUDE_PRIORITY_Q_H_
 #define ZEPHYR_KERNEL_INCLUDE_PRIORITY_Q_H_
 
@@ -90,7 +96,6 @@ static ALWAYS_INLINE int64_t z_sched_prio_cmp(struct k_thread *thread_1, struct 
 
 #ifdef CONFIG_SCHED_DEADLINE
 
-<<<<<<< HEAD
 	int64_t d1 = thread_1->base.prio_deadline;
 	int64_t d2 = thread_2->base.prio_deadline;
 
@@ -99,18 +104,6 @@ static ALWAYS_INLINE int64_t z_sched_prio_cmp(struct k_thread *thread_1, struct 
 
 		 return (int64_t)(d2-d1);
 		
-=======
-	uint64_t d1 = thread_1->base.prio_deadline;
-	uint64_t d2 = thread_2->base.prio_deadline;
-
-
-	if (d1 != d2) {
-		/*
-		*Type casted to int32_t to avoid API break 
-		*/
-		 
-		return (int32_t)((d2 >d1)? 1 : -1);
->>>>>>> refs/remotes/origin/edf_64bit_api
 	}
 #endif /* CONFIG_SCHED_DEADLINE */
 	return 0;

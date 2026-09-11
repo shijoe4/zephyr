@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+ /*
+ *  Copyright (c) 2026 Instituto Superior de Engenharia do Porto (ISEP)
+ *  SPDX-License-Identifier: Apache-2.0
+ * These copyright is only for new changes made to the file for implementing the priority ceiling/floor mutex with deadline floor.
+ */
+
 /* Disable syscall tracing for all calls from this compilation unit to avoid
  * undefined symbols as the macros are not expanded recursively
  */

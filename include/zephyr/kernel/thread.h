@@ -3,7 +3,11 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
+/*
+ * Copyright (c) 2026 Instituto Superior de Engenharia do Porto (ISEP)
+ * SPDX-License-Identifier: Apache-2.0
+ * This copyright notice applies only to new changes made to the file for implementing the priority ceiling/floor mutex with deadline floor.
+ */
 #ifndef ZEPHYR_INCLUDE_KERNEL_THREAD_H_
 #define ZEPHYR_INCLUDE_KERNEL_THREAD_H_
 
