@@ -1116,11 +1116,13 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  *
  * This sets the "deadline" expiration as a time delta from the
  * current time, in the same units used by k_cycle_get_64().  The
+ * current time, in the same units used by k_cycle_get_64().  The
  * scheduler (when deadline scheduling is enabled) will choose the
  * next expiring thread when selecting between threads at the same
  * static priority.  Threads at different priorities will be scheduled
  * according to their static priority.
  *
+ * @note Deadlines are stored internally using 64 bit unsigned
  * @note Deadlines are stored internally using 64 bit unsigned
  * integers.  The number of cycles between the "first" deadline in the
  * scheduler queue and the "last" deadline must be less than 2^63.
@@ -1150,13 +1152,23 @@ __syscall void k_thread_deadline_set_64(k_tid_t thread, uint64_t deadline);
 
 /*
 32-bit version of k_thread_deadline_set, for backwards compatibility with existing code. 
+__syscall void k_thread_deadline_set_64(k_tid_t thread, uint64_t deadline); 
+
+/*
+32-bit version of k_thread_deadline_set, for backwards compatibility with existing code. 
  * @param thread A thread on which to set the deadline
+ * @param deadline A time delta, in cycle units
  * @param deadline A time delta, in cycle units
  */
 
 __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
 
+
+__syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
+
 __syscall void k_thread_absolute_deadline_set(k_tid_t thread, int deadline);
+
+__syscall void k_thread_absolute_deadline_set_64(k_tid_t thread, uint64_t deadline);
 
 __syscall void k_thread_absolute_deadline_set_64(k_tid_t thread, uint64_t deadline);
 #endif

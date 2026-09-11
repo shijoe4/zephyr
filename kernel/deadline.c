@@ -66,6 +66,7 @@ void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 	z_sched_prio_deadline_set_64(thread, deadline);
 }
 	
+<<<<<<< HEAD
 
 
 void z_impl_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
@@ -75,6 +76,11 @@ Assumption is deadline  or newdl never hit the maximum value of 2^62
 */
 
 	deadline = clamp(deadline, 0, INT64_MAX/2);
+=======
+void z_impl_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
+{
+	deadline = clamp(deadline, 0, UINT64_MAX);
+>>>>>>> refs/remotes/origin/edf_64bit_api
 	uint64_t newdl = k_cycle_get_64() + deadline;
 	z_impl_k_thread_absolute_deadline_set_64(tid, newdl);
 }
@@ -92,7 +98,11 @@ void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 {
 	 uint32_t newdl =(uint32_t)deadline ; 
+<<<<<<< HEAD
 	 z_impl_k_thread_deadline_set_64(tid, (uint64_t)newdl);
+=======
+	 z_impl_k_thread_deadline_set_64(thread, (uint64_t)newdl);
+>>>>>>> refs/remotes/origin/edf_64bit_api
 }
 
 void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
