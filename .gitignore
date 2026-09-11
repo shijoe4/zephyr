@@ -13,7 +13,6 @@
 
 # Emacs
 \#*\#
-samples/prio_test/
 build*/
 !doc/build/
 !scripts/build
@@ -131,3 +130,6 @@ node_modules
 
 # Log file from mplab_ipe runner
 MPLABXLog.xml
+
+#remove samples 
+samples/prio_test/

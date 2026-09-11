@@ -1,4 +1,0 @@
--- west build: running target run
-[0/1] To exit from QEMU enter: 'CTRL+a, x'[QEMU] CPU: riscv32
-*** Booting Zephyr OS build v4.3.0-3030-g03ae453ad5eb ***
-ninja: build stopped: interrupted by user.

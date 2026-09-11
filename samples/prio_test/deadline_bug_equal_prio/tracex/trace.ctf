@@ -1,7 +1,0 @@
--- west build: running target run
-[0/1] Re-running CMake...
--- Application: /home/shijo/zephyrproject/zephyr/samples/prio_test_in_mut_inversion_deadline_check_fix
--- CMake version: 3.28.3
--- Cache files will be written to: /home/shijo/.cache/zephyr
--- Zephyr version: 4.3.99 (/home/shijo/zephyrproject/zephyr)
--- Found west (found suitable version "1.5.0", minimum required is "0.14.0")

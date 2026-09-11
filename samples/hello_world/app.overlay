@@ -1,9 +1,0 @@
-/ {
-    chosen {
-        zephyr,tracing-uart = &uart0;
-    };
-};
-
-&uart0 {
-    status = "okay";
-};
