@@ -133,3 +133,4 @@ MPLABXLog.xml
 
 #remove samples 
 samples/prio_test/
+!samples/edf_overflow_test/
