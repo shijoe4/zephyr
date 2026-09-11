@@ -13,7 +13,7 @@
 
 # Emacs
 \#*\#
-
+samples/prio_test/
 build*/
 !doc/build/
 !scripts/build
