@@ -1,3 +1,11 @@
+/*
+ *  Copyright (c) 2026 Instituto Superior de Engenharia do Porto (ISEP)
+ *  SPDX-License-Identifier: Apache-2.0
+ */
+
+
+
+
 #include <zephyr/kernel.h>
 #include <zephyr/kernel_structs.h>
 #include <zephyr/toolchain.h>
