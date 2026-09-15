@@ -93,6 +93,7 @@ static void vbat_init(void)
 
 void soc_early_init_hook(void)
 {
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	unsigned int oldLevel; /* old interrupt lock level */
 
 	/* disable interrupts */
@@ -112,16 +113,24 @@ void soc_early_init_hook(void)
 	vbat_init();
 #endif
 
+	/* Apply the active-mode DCDC output voltage from device tree. This is
+	 * required (independently of CONFIG_PM) to reach the configured BLE TX
+	 * power, and is a no-op when no voltage is configured.
+	 */
+	nxp_mcxw7x_dcdc_init();
+
 	if (IS_ENABLED(CONFIG_PM)) {
 		nxp_mcxw7x_power_init();
 	}
 
 	/* restore interrupt state */
 	irq_unlock(oldLevel);
+#endif /* ! CONFIG_TRUSTED_EXECUTION_NONSECURE */
 }
 
 static int soc_nbu_init(void)
 {
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 #if defined(CONFIG_NXP_NBU)
 	nxp_nbu_init();
 #elif defined(CONFIG_PM)
@@ -152,6 +161,7 @@ static int soc_nbu_init(void)
 	RFMC->RF2P4GHZ_CFG |= RFMC_RF2P4GHZ_CFG_FORCE_DBG_PWRUP_ACK_MASK;
 	CMC_EnableDebugOperation(MCXW7_CMC_ADDR, true);
 #endif
+#endif /* ! CONFIG_TRUSTED_EXECUTION_NONSECURE */
 	return 0;
 }
 

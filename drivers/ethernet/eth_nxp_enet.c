@@ -37,7 +37,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/hwinfo.h>
 
-#ifdef CONFIG_PTP_CLOCK
+#ifdef CONFIG_PTP_CLOCK_NXP_ENET
 #include <zephyr/drivers/ptp_clock.h>
 #endif
 
@@ -137,26 +137,6 @@ static inline struct net_if *get_iface(struct nxp_enet_mac_data *data)
 }
 
 #if defined(CONFIG_PTP_CLOCK_NXP_ENET)
-static bool eth_get_ptp_data(struct net_if *iface, struct net_pkt *pkt)
-{
-	struct net_eth_vlan_hdr *hdr_vlan = (struct net_eth_vlan_hdr *)NET_ETH_HDR(pkt);
-	struct ethernet_context *eth_ctx = net_if_l2_data(iface);
-	bool pkt_is_ptp;
-
-	if (net_eth_is_vlan_enabled(eth_ctx, iface)) {
-		pkt_is_ptp = net_ntohs(hdr_vlan->type) == NET_ETH_PTYPE_PTP;
-	} else {
-		pkt_is_ptp = net_ntohs(NET_ETH_HDR(pkt)->type) == NET_ETH_PTYPE_PTP;
-	}
-
-	if (pkt_is_ptp) {
-		net_pkt_set_priority(pkt, NET_PRIORITY_CA);
-	}
-
-	return pkt_is_ptp;
-}
-
-
 static inline void ts_register_tx_event(const struct device *dev,
 					 enet_frame_info_t *frameinfo)
 {
@@ -164,9 +144,7 @@ static inline void ts_register_tx_event(const struct device *dev,
 	struct net_pkt *pkt = frameinfo->context;
 
 	if (pkt && atomic_get(&pkt->atomic_ref) > 0) {
-		if ((eth_get_ptp_data(net_pkt_iface(pkt), pkt) ||
-		     net_pkt_is_tx_timestamping(pkt)) &&
-		    frameinfo->isTsAvail) {
+		if (net_pkt_is_tx_timestamping(pkt) && frameinfo->isTsAvail) {
 			/* Timestamp is written to packet in ISR.
 			 * Semaphore ensures sequential execution of writing
 			 * the timestamp here and subsequently reading the timestamp
@@ -193,12 +171,11 @@ static inline void eth_wait_for_ptp_ts(const struct device *dev, struct net_pkt 
 	}
 }
 #else
-#define eth_get_ptp_data(...) false
 #define ts_register_tx_event(...)
 #define eth_wait_for_ptp_ts(...)
 #endif /* CONFIG_PTP_CLOCK_NXP_ENET */
 
-#ifdef CONFIG_PTP_CLOCK
+#ifdef CONFIG_PTP_CLOCK_NXP_ENET
 static const struct device *eth_nxp_enet_get_ptp_clock(const struct device *dev,
 						       struct net_if *iface __unused)
 {
@@ -206,7 +183,7 @@ static const struct device *eth_nxp_enet_get_ptp_clock(const struct device *dev,
 
 	return config->ptp_clock;
 }
-#endif /* CONFIG_PTP_CLOCK */
+#endif /* CONFIG_PTP_CLOCK_NXP_ENET */
 
 static int eth_nxp_enet_tx(const struct device *dev, struct net_pkt *pkt)
 {
@@ -224,8 +201,7 @@ static int eth_nxp_enet_tx(const struct device *dev, struct net_pkt *pkt)
 		return ret;
 	}
 
-	frame_is_timestamped =
-		eth_get_ptp_data(net_pkt_iface(pkt), pkt) || net_pkt_is_tx_timestamping(pkt);
+	frame_is_timestamped = net_pkt_is_tx_timestamping(pkt);
 
 	ret = ENET_SendFrame(data->base, &data->enet_handle, data->tx_frame_buf, total_len, RING_ID,
 			     frame_is_timestamped, pkt);
@@ -250,12 +226,11 @@ static enum ethernet_hw_caps eth_nxp_enet_get_capabilities(const struct device *
 	enum ethernet_hw_caps caps;
 
 	caps = ETHERNET_LINK_10BASE |
+#if defined(CONFIG_ETH_NXP_ENET_MULTICAST_FILTER)
 		ETHERNET_HW_FILTERING |
+#endif
 #if defined(CONFIG_NET_VLAN)
 		ETHERNET_HW_VLAN |
-#endif
-#if defined(CONFIG_PTP_CLOCK_NXP_ENET)
-		ETHERNET_PTP |
 #endif
 #if defined(CONFIG_ETH_NXP_ENET_HW_ACCELERATION)
 		ETHERNET_HW_TX_CHKSUM_OFFLOAD |
@@ -292,6 +267,7 @@ static int eth_nxp_enet_set_config(const struct device *dev,
 			data->mac_addr[2], data->mac_addr[3],
 			data->mac_addr[4], data->mac_addr[5]);
 		return 0;
+#if defined(CONFIG_ETH_NXP_ENET_MULTICAST_FILTER)
 	case ETHERNET_CONFIG_TYPE_FILTER:
 		/* The ENET driver does not modify the address buffer but the API is not const */
 		if (cfg->filter.set) {
@@ -302,6 +278,7 @@ static int eth_nxp_enet_set_config(const struct device *dev,
 						 (uint8_t *)cfg->filter.mac_address.addr);
 		}
 		return 0;
+#endif
 	case ETHERNET_CONFIG_TYPE_PROMISC_MODE:
 		/* Promiscuous mode is enabled at eth_nxp_enet_init and
 		 * cannot be disabled at runtime
@@ -409,6 +386,7 @@ static int eth_nxp_enet_rx(const struct device *dev)
 
 	pkt->timestamp.nanosecond = ts;
 	pkt->timestamp.second = ptp_time.second;
+	net_pkt_set_rx_timestamping(pkt, true);
 	k_mutex_unlock(data->ptp.ptp_mutex);
 #endif /* CONFIG_PTP_CLOCK_NXP_ENET */
 
@@ -462,13 +440,16 @@ static void nxp_enet_phy_cb(const struct device *phy,
 	enet_mii_duplex_t duplex;
 
 	if (state->is_up) {
+#if defined(FSL_FEATURE_ENET_HAS_AVB) && FSL_FEATURE_ENET_HAS_AVB
 		if (PHY_LINK_IS_SPEED_1000M(state->speed)) {
 			speed = kENET_MiiSpeed1000M;
-		} else if (PHY_LINK_IS_SPEED_100M(state->speed)) {
-			speed = kENET_MiiSpeed100M;
-		} else {
-			speed = kENET_MiiSpeed10M;
-		}
+		} else
+#endif /* FSL_FEATURE_ENET_HAS_AVB */
+			if (PHY_LINK_IS_SPEED_100M(state->speed)) {
+				speed = kENET_MiiSpeed100M;
+			} else {
+				speed = kENET_MiiSpeed10M;
+			}
 
 		if (PHY_LINK_IS_FULL_DUPLEX(state->speed)) {
 			duplex = kENET_MiiFullDuplex;
@@ -477,11 +458,9 @@ static void nxp_enet_phy_cb(const struct device *phy,
 		}
 
 		ENET_SetMII(data->base, speed, duplex);
-
-		net_eth_carrier_on(data->iface);
-	} else {
-		net_eth_carrier_off(data->iface);
 	}
+
+	net_eth_carrier_set(data->iface, state->is_up);
 }
 
 static void eth_nxp_enet_iface_init(struct net_if *iface)
@@ -557,7 +536,10 @@ static void eth_nxp_enet_isr(const struct device *dev)
 	struct nxp_enet_mac_data *data = dev->data;
 	unsigned int irq_lock_key = irq_lock();
 
-	uint32_t eir = ENET_GetInterruptStatus(data->base);
+	/* EIR reflects each source even where EIMR masks it off, so branching
+	 * on it alone re-enters branches for events the driver has disabled
+	 */
+	uint32_t eir = ENET_GetInterruptStatus(data->base) & data->base->EIMR;
 
 	if (eir & (kENET_RxFrameInterrupt | kENET_RxBufferInterrupt)) {
 		ENET_ReceiveIRQHandler(ENET_IRQ_HANDLER_ARGS(data->base, &data->enet_handle));
@@ -724,8 +706,10 @@ static int eth_nxp_enet_init(const struct device *dev)
 		enet_config.miiMode = kENET_MiiMode;
 	} else if (config->phy_mode == NXP_ENET_RMII_MODE) {
 		enet_config.miiMode = kENET_RmiiMode;
+#if defined(FSL_FEATURE_ENET_HAS_AVB) && FSL_FEATURE_ENET_HAS_AVB
 	} else if (config->phy_mode == NXP_ENET_RGMII_MODE) {
 		enet_config.miiMode = kENET_RgmiiMode;
+#endif /* FSL_FEATURE_ENET_HAS_AVB */
 	} else {
 		return -EINVAL;
 	}
@@ -748,6 +732,16 @@ static int eth_nxp_enet_init(const struct device *dev)
 	nxp_enet_driver_cb(config->ptp_clock, NXP_ENET_PTP_CLOCK,
 				NXP_ENET_MODULE_RESET, &data->ptp);
 	ENET_SetTxReclaim(&data->enet_handle, true, 0);
+#endif
+
+#if !defined(CONFIG_ETH_NXP_ENET_MULTICAST_FILTER)
+	/*
+	 * With hash filtering disabled, open the group-address hash (GAUR/GALR)
+	 * to every multicast address so reception does not depend on per-group
+	 * hash installation. Software filtering still applies in the stack.
+	 */
+	data->base->GAUR = 0xFFFFFFFFU;
+	data->base->GALR = 0xFFFFFFFFU;
 #endif
 
 	ENET_ActiveRead(data->base);
@@ -809,7 +803,7 @@ static const struct ethernet_api api_funcs = {
 	.set_config		= eth_nxp_enet_set_config,
 	.get_config		= eth_nxp_enet_get_config,
 	.send			= eth_nxp_enet_tx,
-#if defined(CONFIG_PTP_CLOCK)
+#if defined(CONFIG_PTP_CLOCK_NXP_ENET)
 	.get_ptp_clock		= eth_nxp_enet_get_ptp_clock,
 #endif
 };

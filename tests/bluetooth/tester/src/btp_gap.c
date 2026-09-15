@@ -1714,7 +1714,7 @@ static uint8_t pair(const void *cmd, uint16_t cmd_len,
 
 	err = bt_conn_set_security(conn, BT_SECURITY_L2);
 	/*
-	 * If the error code is `-EBUSY`, it means the pairing/enryption is ongoing.
+	 * If the error code is `-EBUSY`, it means the pairing/encryption is ongoing.
 	 * Just ignore the error.
 	 */
 	if ((err < 0) && (err != -EBUSY)) {
@@ -1736,7 +1736,7 @@ static uint8_t pair_v2(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *r
 
 	/* TODO: Only supports mode 4 */
 	if ((cp->mode != BTP_GAP_PAIR_V2_MODE_4) && (cp->mode != BTP_GAP_PAIR_V2_MODE_ANY)) {
-		LOG_WRN("Unsupport mode %d", cp->mode);
+		LOG_WRN("Unsupported mode %d", cp->mode);
 		return BTP_STATUS_FAILED;
 	}
 
@@ -2762,6 +2762,7 @@ static void iso_broadcaster_connected(struct bt_iso_chan *chan)
 	};
 	struct btp_gap_bis_data_path_setup_ev ev;
 	struct bt_le_ext_adv *ext_adv = tester_gap_ext_adv_get(0);
+	struct bt_le_ext_adv_info info;
 
 	err = bt_iso_chan_get_index(chan);
 	if (err < 0) {
@@ -2779,7 +2780,13 @@ static void iso_broadcaster_connected(struct bt_iso_chan *chan)
 		return;
 	}
 
-	bt_addr_le_copy(&ev.address, &ext_adv->random_addr);
+	err = bt_le_ext_adv_get_info(ext_adv, &info);
+	if (err != 0) {
+		LOG_ERR("Failed to get advertising set info: %d", err);
+		return;
+	}
+
+	bt_addr_le_copy(&ev.address, info.addr);
 
 	tester_event(BTP_SERVICE_ID_GAP, BTP_GAP_EV_BIS_DATA_PATH_SETUP, &ev, sizeof(ev));
 }

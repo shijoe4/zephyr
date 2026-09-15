@@ -7,7 +7,6 @@
 #define DT_DRV_COMPAT nxp_imx_usdhc
 
 #include <zephyr/kernel.h>
-#include <zephyr/cache.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/sdhc.h>
 #include <zephyr/sd/sd_spec.h>
@@ -68,6 +67,7 @@ struct usdhc_config {
 	uint8_t nusdhc;
 	const struct gpio_dt_spec pwr_gpio;
 	const struct gpio_dt_spec detect_gpio;
+	bool non_removable;
 	bool detect_dat3;
 	bool detect_cd;
 	bool no_180_vol;
@@ -272,11 +272,13 @@ static void imx_usdhc_init_host_props(const struct device *dev)
 	props->power_delay = cfg->power_delay_ms;
 	/* Read host capabilities */
 	USDHC_GetCapability(base, &caps);
+#if !(defined(FSL_FEATURE_USDHC_HAS_NO_VS18) && FSL_FEATURE_USDHC_HAS_NO_VS18)
 	if (cfg->no_180_vol) {
 		props->host_caps.vol_180_support = false;
 	} else {
 		props->host_caps.vol_180_support = (bool)(caps.flags & kUSDHC_SupportV180Flag);
 	}
+#endif
 	if (cfg->no_300_vol) {
 		props->host_caps.vol_300_support = false;
 	} else {
@@ -476,72 +478,6 @@ static int imx_usdhc_set_io(const struct device *dev, struct sdhc_io *ios)
 	return 0;
 }
 
-#ifdef CONFIG_IMX_USDHC_DMA_SUPPORT
-/*
- * Cache maintenance for the data buffer on the ADMA2 DMA path. The buffer
- * (rxData/txData) is supplied by upper layers (FAT FS, SD subsys) and lives
- * in regular cacheable RAM. Without these calls, on a write the controller
- * may DMA-read stale RAM (CPU's writes still in D-cache), and on a read the
- * CPU may consume stale cache lines after the controller has DMA-written
- * fresh data to RAM.
- *
- * Pattern: flush before transfer (covers TX correctness and prevents dirty
- * cache eviction over DMA-written data on RX), invalidate after transfer
- * on RX (so the CPU sees the freshly DMA-written data).
- */
-#ifdef CONFIG_SDHC_SCATTER_GATHER_TRANSFER
-static void imx_usdhc_dcache_pre_xfer(usdhc_scatter_gather_data_t *data)
-{
-	usdhc_scatter_gather_data_list_t *sg;
-
-	if (data == NULL) {
-		return;
-	}
-	for (sg = &data->sgData; sg != NULL && sg->dataAddr != NULL; sg = sg->dataList) {
-		sys_cache_data_flush_range(sg->dataAddr, sg->dataSize);
-	}
-}
-
-static void imx_usdhc_dcache_post_xfer(usdhc_scatter_gather_data_t *data)
-{
-	usdhc_scatter_gather_data_list_t *sg;
-
-	if (data == NULL || data->dataDirection != kUSDHC_TransferDirectionReceive) {
-		return;
-	}
-	for (sg = &data->sgData; sg != NULL && sg->dataAddr != NULL; sg = sg->dataList) {
-		sys_cache_data_invd_range(sg->dataAddr, sg->dataSize);
-	}
-}
-#else
-static void imx_usdhc_dcache_pre_xfer(usdhc_data_t *data)
-{
-	void *buf;
-	size_t len;
-
-	if (data == NULL) {
-		return;
-	}
-	buf = data->rxData ? (void *)data->rxData : (void *)data->txData;
-	if (buf != NULL) {
-		len = (size_t)data->blockSize * data->blockCount;
-		sys_cache_data_flush_range(buf, len);
-	}
-}
-
-static void imx_usdhc_dcache_post_xfer(usdhc_data_t *data)
-{
-	size_t len;
-
-	if (data == NULL || data->rxData == NULL) {
-		return;
-	}
-	len = (size_t)data->blockSize * data->blockCount;
-	sys_cache_data_invd_range((void *)data->rxData, len);
-}
-#endif /* CONFIG_SDHC_SCATTER_GATHER_TRANSFER */
-#endif /* CONFIG_IMX_USDHC_DMA_SUPPORT */
-
 /*
  * Internal transfer function, used by tuning and request apis
  */
@@ -560,8 +496,6 @@ static int imx_usdhc_transfer(const struct device *dev, struct usdhc_host_transf
 	dma_config.burstLen = kUSDHC_EnBurstLenForINCR;
 #endif
 	dma_config.dmaMode = kUSDHC_DmaModeAdma2;
-
-	imx_usdhc_dcache_pre_xfer(request->transfer->data);
 #endif /* CONFIG_IMX_USDHC_DMA_SUPPORT */
 
 	/* Reset transfer status */
@@ -604,9 +538,6 @@ static int imx_usdhc_transfer(const struct device *dev, struct usdhc_host_transf
 		if (dev_data->transfer_status & TRANSFER_DATA_FAILED) {
 			return -EIO;
 		}
-#ifdef CONFIG_IMX_USDHC_DMA_SUPPORT
-		imx_usdhc_dcache_post_xfer(request->transfer->data);
-#endif
 	}
 	return 0;
 }
@@ -1037,6 +968,8 @@ static int imx_usdhc_get_card_present(const struct device *dev)
 		data->card_present = USDHC_DetectCardInsert(base);
 	} else if (cfg->detect_gpio.port) {
 		data->card_present = gpio_pin_get_dt(&cfg->detect_gpio) > 0;
+	} else if (cfg->non_removable) {
+		data->card_present = true;
 	} else {
 		LOG_WRN("No card detection method configured, assuming card "
 			"is present");
@@ -1237,6 +1170,8 @@ static int imx_usdhc_init(const struct device *dev)
 		if (ret) {
 			return ret;
 		}
+	} else if (cfg->non_removable) {
+		LOG_INF("No power control GPIO defined for non-removable SDIO device");
 	} else {
 		LOG_WRN("No power control GPIO defined. Without power control,\n"
 			"the SD card may fail to communicate with the host");
@@ -1321,6 +1256,7 @@ static DEVICE_API(sdhc, usdhc_api) = {
 		.nusdhc = n,                                                                       \
 		.pwr_gpio = GPIO_DT_SPEC_INST_GET_OR(n, pwr_gpios, {0}),                           \
 		.detect_gpio = GPIO_DT_SPEC_INST_GET_OR(n, cd_gpios, {0}),                         \
+		.non_removable = DT_INST_PROP_OR(n, non_removable, false),                         \
 		.data_timeout = DT_INST_PROP(n, data_timeout),                                     \
 		.detect_dat3 = DT_INST_PROP(n, detect_dat3),                                       \
 		.detect_cd = DT_INST_PROP(n, detect_cd),                                           \

@@ -11,6 +11,8 @@ flash: 512
 ram: 64
 supported:
   - clock_control
+  - counter
+  - flash
   - gpio
   - pinctrl
   - uart

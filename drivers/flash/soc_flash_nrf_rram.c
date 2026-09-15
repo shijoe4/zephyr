@@ -152,42 +152,23 @@ static void commit_changes(off_t addr, size_t len)
 }
 #endif
 
+/*
+ * Write a single block of @p len bytes at @p addr.
+ * This primitive never sleeps, so it is safe to call from the
+ * radio-sync timeslot (interrupt) context via write_op().
+ */
 static void rram_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 {
-#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	nrf_rramc_config_t config = {.mode_write = true, .write_buff_size = WRITE_BUFFER_SIZE};
-
-	nrf_rramc_config_set(NRF_RRAMC, &config);
-#endif
-
-	size_t chunk_len = len;
-
-#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
-	while (len > 0) {
-		chunk_len = MIN(len, CONFIG_NRF_RRAM_THROTTLING_DATA_BLOCK * WRITE_LINE_SIZE);
-#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
-		if (data) {
-			memcpy((void *)addr, data, chunk_len);
-		} else {
-			memset((void *)addr, fill_val, chunk_len);
-		}
-#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
-		addr += chunk_len;
-		data = (const uint8_t *)data + chunk_len;
-		len -= chunk_len;
-		k_usleep(CONFIG_NRF_RRAM_THROTTLING_DELAY);
+	if (data) {
+		memcpy((void *)addr, data, len);
+	} else {
+		memset((void *)addr, fill_val, len);
 	}
-#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
 
 	barrier_dmem_fence_full(); /* Barrier following our last write. */
 
 #if WRITE_BUFFER_ENABLE
 	commit_changes(addr, len);
-#endif
-
-#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	config.mode_write = false;
-	nrf_rramc_config_set(NRF_RRAMC, &config);
 #endif
 }
 
@@ -209,7 +190,18 @@ static int write_op(void *context)
 	struct flash_context *w_ctx = context;
 	size_t len;
 
+#ifndef CONFIG_SOC_FLASH_NRF_THROTTLING
 	uint32_t i = 0U;
+#endif
+
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+	/* Defensive re-program of RRAMC write mode at the start of every radio time slot.
+	 * Setting it again here makes write_op() self-contained.
+	 */
+	nrf_rramc_config_t config = {.mode_write = true, .write_buff_size = WRITE_BUFFER_SIZE};
+
+	nrf_rramc_config_set(NRF_RRAMC, &config);
+#endif
 
 	if (w_ctx->enable_time_limit) {
 		nrf_flash_sync_get_timestamp_begin();
@@ -223,15 +215,26 @@ static int write_op(void *context)
 
 		shift_write_context(len, w_ctx);
 
-		if (w_ctx->len > 0) {
-			i++;
+		if (w_ctx->len == 0) {
+			break;
+		}
 
-			if (w_ctx->enable_time_limit) {
-				if (nrf_flash_sync_check_time_limit(i)) {
-					return FLASH_OP_ONGOING;
-				}
+#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
+		/* Throttling: emit exactly one write block per timeslot and let
+		 * the sync backend space the next timeslot by the throttling
+		 * delay.
+		 */
+		nrf_flash_sync_set_delay(CONFIG_NRF_RRAM_THROTTLING_DELAY);
+		return FLASH_OP_ONGOING;
+#else
+		i++;
+
+		if (w_ctx->enable_time_limit) {
+			if (nrf_flash_sync_check_time_limit(i)) {
+				return FLASH_OP_ONGOING;
 			}
 		}
+#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
 	}
 
 	return FLASH_OP_DONE;
@@ -253,6 +256,14 @@ static int write_synchronously(off_t addr, const void *data, uint8_t fill_val, s
 	return nrf_flash_sync_exe(&flash_op_desc);
 }
 
+#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
+/* Weak fallback for sync backends that cannot control inter-timeslot spacing */
+__weak void nrf_flash_sync_set_delay(uint32_t delay_us)
+{
+	ARG_UNUSED(delay_us);
+}
+#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
+
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 
 /* Internal write workhorse. Callers (nrf_rram_write / nrf_rram_fill_impl)
@@ -273,14 +284,60 @@ static int nrf_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 
 	SYNC_LOCK();
 
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+	/* Enable RRAMC write mode once for the whole API call.
+	 * The SYNC_LOCK above guarantees no concurrent driver call
+	 * touches RRAMC config in between. write_op() additionally
+	 * re-programs write mode at the start of every radio slot for
+	 * defence in depth.
+	 */
+	nrf_rramc_config_t config = {.mode_write = true, .write_buff_size = WRITE_BUFFER_SIZE};
+
+	nrf_rramc_config_set(NRF_RRAMC, &config);
+#endif
+
 #ifndef CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE
 	if (nrf_flash_sync_is_required()) {
 		ret = write_synchronously(addr, data, fill_val, len);
 	} else
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 	{
+#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
+		/* Thread-context throttling: write one block at a time and
+		 * sleep after each block to spread the RRAM write current over
+		 * time.
+		 */
+		while (len > 0) {
+			size_t chunk_len =
+				MIN(len, CONFIG_NRF_RRAM_THROTTLING_DATA_BLOCK * WRITE_LINE_SIZE);
+
+			rram_write(addr, data, fill_val, chunk_len);
+
+			addr += chunk_len;
+			/* Only advance the source pointer for real data. The
+			 * erase-emulation path passes data == NULL and relies on
+			 * rram_write() dispatching to memset() for every chunk;
+			 * advancing NULL would fabricate a bogus pointer and turn
+			 * later chunks into memcpy() from low memory.
+			 */
+			if (data != NULL) {
+				data = (const uint8_t *)data + chunk_len;
+			}
+			len -= chunk_len;
+
+			if (!k_is_in_isr()) {
+				k_usleep(CONFIG_NRF_RRAM_THROTTLING_DELAY);
+			}
+		}
+#else
 		rram_write(addr, data, fill_val, len);
+#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
 	}
+
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+	config.mode_write = false;
+	nrf_rramc_config_set(NRF_RRAMC, &config);
+#endif
 
 	SYNC_UNLOCK();
 

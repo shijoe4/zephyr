@@ -484,7 +484,9 @@ static int dma_stm32_configure(const struct device *dev,
 	DMA_InitStruct.PeriphBurst = stm32_dma_get_pburst(config,
 							stream->source_periph);
 
-#if !defined(CONFIG_SOC_SERIES_STM32H7X) && !defined(CONFIG_SOC_SERIES_STM32MP1X)
+#if !defined(CONFIG_SOC_SERIES_STM32H7X) && \
+	!defined(CONFIG_SOC_SERIES_STM32MP1X) && \
+	!defined(CONFIG_SOC_SERIES_STM32MP13X)
 	if (config->channel_direction != MEMORY_TO_MEMORY) {
 		if (config->dma_slot >= 8) {
 			LOG_ERR("dma slot error.");
@@ -539,11 +541,14 @@ static int dma_stm32_configure(const struct device *dev,
 #if defined(CONFIG_DMA_STM32_V1)
 	if (DMA_InitStruct.FIFOMode == LL_DMA_FIFOMODE_ENABLE) {
 		LL_DMA_EnableFifoMode(dma, dma_stm32_id_to_stream(id));
-		LL_DMA_EnableIT_FE(dma, dma_stm32_id_to_stream(id));
 	} else {
 		LL_DMA_DisableFifoMode(dma, dma_stm32_id_to_stream(id));
-		LL_DMA_DisableIT_FE(dma, dma_stm32_id_to_stream(id));
 	}
+	/* FIFO error can be ignored, since it doesn't imply loss of data,
+	 * and errors caused by a wrong configuration are handled by
+	 * stm32_dma_check_fifo_mburst().
+	 */
+	LL_DMA_DisableIT_FE(dma, dma_stm32_id_to_stream(id));
 #endif
 	return ret;
 }

@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,7 +28,7 @@
 #ifndef SOC_INFINEON_EDGE_PSE84_MTB_IPC_CONFIG_H_
 #define SOC_INFINEON_EDGE_PSE84_MTB_IPC_CONFIG_H_
 
-#include "mtb_ipc.h"
+#include <mtb_ipc.h>
 
 
 /** Define the channel used to set up the IPC instance set up for SRF operations*/

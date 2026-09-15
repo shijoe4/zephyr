@@ -44,6 +44,7 @@ void usbh_device_free(struct usb_device *const udev)
 	sys_dlist_remove(&udev->node);
 	if (udev->cfg_desc != NULL) {
 		k_heap_free(&usb_device_heap, udev->cfg_desc);
+		udev->cfg_desc = NULL;
 	}
 
 	k_mem_slab_free(&usb_device_slab, (void *)udev);
@@ -76,7 +77,7 @@ static int validate_device_mps0(const struct usb_device *const udev)
 {
 	const uint8_t mps0 = udev->dev_desc.bMaxPacketSize0;
 
-	if (udev->speed == USB_SPEED_SPEED_SS || udev->speed == USB_SPEED_SPEED_LS) {
+	if (udev->speed == USB_SPEED_SPEED_SS) {
 		LOG_ERR("USB device speed not supported");
 		return -ENOTSUP;
 	}
@@ -91,6 +92,13 @@ static int validate_device_mps0(const struct usb_device *const udev)
 	if (udev->speed == USB_SPEED_SPEED_FS) {
 		if (mps0 != 8 && mps0 != 16 && mps0 != 32 && mps0 != 64) {
 			LOG_ERR("FS device has wrong bMaxPacketSize0 %u", mps0);
+			return -EINVAL;
+		}
+	}
+
+	if (udev->speed == USB_SPEED_SPEED_LS) {
+		if (mps0 != 8) {
+			LOG_ERR("LS device has wrong bMaxPacketSize0 %u", mps0);
 			return -EINVAL;
 		}
 	}
@@ -120,7 +128,7 @@ static int alloc_device_address(struct usb_device *const udev, uint8_t *const ad
 }
 
 enum ep_op {
-	EP_OP_TEST, /* Verify endpont descriptor */
+	EP_OP_TEST, /* Verify endpoint descriptor */
 	EP_OP_UP,   /* Enable endpoint and update endpoint pointers */
 	EP_OP_DOWN, /* Disable endpoint and update endpoint pointers */
 };
@@ -434,12 +442,14 @@ int usbh_device_set_configuration(struct usb_device *const udev, const uint8_t n
 		LOG_ERR("Failed to read configuration descriptor of %u bytes: %d",
 			cfg_desc.wTotalLength, err);
 		k_heap_free(&usb_device_heap, udev->cfg_desc);
+		udev->cfg_desc = NULL;
 		goto error;
 	}
 
 	if (memcmp(udev->cfg_desc, &cfg_desc, sizeof(cfg_desc))) {
 		LOG_ERR("Configuration descriptor read mismatch");
 		k_heap_free(&usb_device_heap, udev->cfg_desc);
+		udev->cfg_desc = NULL;
 		goto error;
 	}
 
@@ -449,6 +459,7 @@ int usbh_device_set_configuration(struct usb_device *const udev, const uint8_t n
 	err = parse_configuration_descriptor(udev);
 	if (err) {
 		k_heap_free(&usb_device_heap, udev->cfg_desc);
+		udev->cfg_desc = NULL;
 		goto error;
 	}
 
@@ -568,18 +579,6 @@ int usbh_device_init(struct usb_device *const udev)
 		goto error;
 	}
 
-	err = usbh_req_desc_dev(udev, sizeof(udev->dev_desc), &udev->dev_desc);
-	if (err) {
-		LOG_ERR("Failed to read device descriptor");
-		goto error;
-	}
-
-	if (!udev->dev_desc.bNumConfigurations) {
-		LOG_ERR("Device has no configurations, bNumConfigurations %d",
-			udev->dev_desc.bNumConfigurations);
-		goto error;
-	}
-
 	err = alloc_device_address(udev, &new_addr);
 	if (err) {
 		LOG_ERR("Failed to allocate device address");
@@ -592,6 +591,19 @@ int usbh_device_init(struct usb_device *const udev)
 	}
 
 	LOG_INF("New device with address %u state %u", udev->addr, udev->state);
+
+	err = usbh_req_desc_dev(udev, sizeof(udev->dev_desc), &udev->dev_desc);
+	if (err) {
+		LOG_ERR("Failed to read device descriptor");
+		goto error;
+	}
+
+	if (!udev->dev_desc.bNumConfigurations) {
+		LOG_ERR("Device has no configurations, bNumConfigurations %d",
+			udev->dev_desc.bNumConfigurations);
+		err = -EINVAL;
+		goto error;
+	}
 
 	err = usbh_device_set_configuration(udev, 1);
 	if (err) {

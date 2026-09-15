@@ -162,6 +162,11 @@ static void bap_broadcast_assistant_recv_state_cb(
 		return;
 	}
 
+	if (state == NULL) {
+		bt_shell_print("Empty BASS recv state");
+		return;
+	}
+
 	bin2hex(state->bad_code, BT_ISO_BROADCAST_CODE_SIZE, bad_code, sizeof(bad_code));
 
 	is_bad_code = state->encrypt_state == BT_BAP_BIG_ENC_STATE_BAD_CODE;
@@ -500,10 +505,30 @@ static int cmd_bap_broadcast_assistant_add_src(const struct shell *sh,
 
 	param.broadcast_id = broadcast_id;
 
+	/* TODO: Support multiple subgroups */
 	if (argc > 6) {
+		unsigned long bis_sync;
+
+		bis_sync = shell_strtoul(argv[6], 0, &result);
+		if (result) {
+			shell_error(sh, "Could not parse bis_sync: %d", result);
+
+			return -ENOEXEC;
+		}
+
+		if (!BT_BAP_BASS_VALID_BIT_BITFIELD(bis_sync)) {
+			shell_error(sh, "Invalid bis_sync: %lu", bis_sync);
+
+			return -ENOEXEC;
+		}
+
+		subgroup.bis_sync = bis_sync;
+	}
+
+	if (argc > 7) {
 		unsigned long pa_interval;
 
-		pa_interval = shell_strtoul(argv[6], 0, &result);
+		pa_interval = shell_strtoul(argv[7], 0, &result);
 		if (result) {
 			shell_error(sh, "Could not parse pa_interval: %d",
 				    result);
@@ -523,26 +548,6 @@ static int cmd_bap_broadcast_assistant_add_src(const struct shell *sh,
 		param.pa_interval = pa_interval;
 	} else {
 		param.pa_interval = BT_BAP_PA_INTERVAL_UNKNOWN;
-	}
-
-	/* TODO: Support multiple subgroups */
-	if (argc > 7) {
-		unsigned long bis_sync;
-
-		bis_sync = shell_strtoul(argv[7], 0, &result);
-		if (result) {
-			shell_error(sh, "Could not parse bis_sync: %d", result);
-
-			return -ENOEXEC;
-		}
-
-		if (!BT_BAP_BASS_VALID_BIT_BITFIELD(bis_sync)) {
-			shell_error(sh, "Invalid bis_sync: %lu", bis_sync);
-
-			return -ENOEXEC;
-		}
-
-		subgroup.bis_sync = bis_sync;
 	}
 
 	if (argc > 8) {
@@ -1265,7 +1270,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD_ARG(add_src, NULL,
 		      "Add a source <address: XX:XX:XX:XX:XX:XX> "
 		      "<type: public/random> <adv_sid> <sync_pa> "
-		      "<broadcast_id> [<pa_interval>] [<sync_bis>] "
+		      "<broadcast_id> [<sync_bis>] [<pa_interval>] "
 		      "[<metadata>]",
 		      cmd_bap_broadcast_assistant_add_src, 6, 3),
 	SHELL_CMD_ARG(add_broadcast_id, NULL,

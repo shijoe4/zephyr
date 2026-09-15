@@ -23,6 +23,7 @@
 		zephyr,flash-controller = &mx25r6435f;
 		zephyr,bt-c2h-uart = &usart1;
 		zephyr,bt-hci = &hci_spi;
+		zephyr,system-timer = &lptim1;
 	};
 
 	leds {
@@ -217,6 +218,8 @@
 		irq-gpios = <&gpioe 6 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 		spi-max-frequency = <DT_FREQ_M(2)>;
 		spi-hold-cs;
+		reset-event;
+		req-ll-only;
 	};
 
 	wifi0: ism43362@1 {
@@ -279,7 +282,7 @@
 	};
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSE LPTIM1_SEL(3)>;
 	status = "okay";

@@ -403,7 +403,7 @@ _xstack_call0_\@:
 #endif
 #endif
 #ifdef CONFIG_XTENSA_MPU
-	call4 xtensa_mpu_map_write
+	call4 xtensa_mpu_thread_map_write
 #endif
 
 _xstack_skip_table_swap_\@:
@@ -587,8 +587,7 @@ _do_call_\@:
 	 */
 	beq a6, a1, _restore_\@
 
-#if !defined(CONFIG_KERNEL_COHERENCE) || \
-    (defined(CONFIG_KERNEL_COHERENCE) && defined(CONFIG_SCHED_CPU_MASK_PIN_ONLY))
+#if !defined(CONFIG_KERNEL_COHERENCE)
 	l32i a1, a1, 0
 	l32i a0, a1, ___xtensa_irq_bsa_t_a0_OFFSET
 	addi a1, a1, ___xtensa_irq_bsa_t_SIZEOF
@@ -599,9 +598,7 @@ _do_call_\@:
 	SPILL_ALL_WINDOWS
 #endif
 
-#if defined(CONFIG_KERNEL_COHERENCE) && \
-	defined(CONFIG_USERSPACE) && \
-	!defined(CONFIG_SCHED_CPU_MASK_PIN_ONLY)
+#if defined(CONFIG_KERNEL_COHERENCE) && defined(CONFIG_USERSPACE)
 
 	/* With userspace enabled, we need to swap page table via function calls
 	 * above after returning from syscall handler above in CROSS_STACK_CALL.
@@ -744,16 +741,19 @@ _not_triple_fault:
 	s32i a2, a1, ___xtensa_irq_bsa_t_a2_OFFSET
 	s32i a3, a1, ___xtensa_irq_bsa_t_a3_OFFSET
 
-#ifdef CONFIG_XTENSA_MMU
-.if \LVL != 1
-#endif
+#ifndef CONFIG_XTENSA_MMU
+.if \LVL == 1
 	/* Save register needed for handling the exception as
 	 * this register can be overwritten during nested
-	 * exceptions.
+	 * exceptions.  EXCVADDR describes exceptions, not
+	 * interrupts, so only the level 1 vector (which serves
+	 * both) needs it: nothing consumes it from the frames of
+	 * interrupt-only levels and nothing restores it on exit.
+	 * (With the MMU enabled, level 1 saved it on vector entry
+	 * already.)
 	 */
 	rsr.excvaddr a0
 	s32i a0, a1, ___xtensa_irq_bsa_t_excvaddr_OFFSET
-#ifdef CONFIG_XTENSA_MMU
 .endif
 #endif
 

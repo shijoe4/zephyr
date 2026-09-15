@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2024 BayLibre SAS
- * Copyright (c) 2026 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2026 Philipp Steiner
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -458,6 +458,15 @@ int ptp_msg_post_recv(struct ptp_port *port, struct ptp_msg *msg, int cnt)
 	enum ptp_msg_type type = ptp_msg_type(msg);
 	int64_t current;
 	int tlv_len;
+
+	/* type is a 4-bit field (0-15) taken straight off the wire, but
+	 * msg_size[] only has entries up to PTP_MSG_MANAGEMENT. Reject
+	 * undefined types before indexing to avoid an out-of-bounds read.
+	 */
+	if (type >= ARRAY_SIZE(msg_size)) {
+		LOG_ERR("Received message with unsupported type");
+		return -EBADMSG;
+	}
 
 	if (msg_size[type] > cnt) {
 		LOG_ERR("Received message with incorrect length");

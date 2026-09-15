@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2026, Cirrus Logic, Inc.
+ * Copyright (c) 2026 Cirrus Logic, Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * @file
- * @brief Firmware for Cirrus Logic CS40L26/27 Haptic Devices
+ * @brief Firmware functions for Cirrus Logic CS40L26/27 haptic drivers
  */
 
 #include "cs40l26.h"
@@ -120,7 +120,27 @@ int cs40l26_firmware_read(const struct device *const dev, const uint32_t firmwar
 		return ret;
 	}
 
-	return config->bus_io->read(dev, firmware_address, rx, 1);
+	return cs40lxx_read(&config->io_bus, firmware_address, rx);
+}
+
+int cs40l26_firmware_read_offset(const struct device *const dev, const uint32_t firmware_control,
+				 uint32_t *const rx, const off_t offset)
+{
+	const struct cs40l26_config *const config = dev->config;
+	uint32_t firmware_address;
+	int ret;
+
+	ret = cs40l26_get_firmware_address(dev, firmware_control, &firmware_address);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (!IN_RANGE((int64_t)offset, -(int64_t)firmware_address,
+		      (int64_t)(UINT32_MAX - firmware_address))) {
+		return -EINVAL;
+	}
+
+	return cs40lxx_read(&config->io_bus, firmware_address + offset, rx);
 }
 
 int cs40l26_firmware_burst_write(const struct device *const dev, const uint32_t firmware_control,
@@ -135,7 +155,7 @@ int cs40l26_firmware_burst_write(const struct device *const dev, const uint32_t 
 		return ret;
 	}
 
-	return config->bus_io->write(dev, firmware_address, tx, len);
+	return cs40lxx_burst_write(&config->io_bus, firmware_address, tx, len);
 }
 
 int cs40l26_firmware_write(const struct device *const dev, const uint32_t firmware_control,
@@ -156,11 +176,11 @@ int cs40l26_firmware_raw_write(const struct device *const dev, const uint32_t fi
 		return ret;
 	}
 
-	return config->bus_io->raw_write(dev, firmware_address, tx, len);
+	return cs40lxx_raw_burst_write(&config->io_bus, firmware_address, tx, len);
 }
 
 int cs40l26_firmware_multi_write(const struct device *const dev,
-				 const struct cs40l26_multi_write *const multi_write,
+				 const struct cs40lxx_multi_write *const multi_write,
 				 const uint32_t len)
 {
 	const struct cs40l26_config *const config = dev->config;
@@ -173,12 +193,41 @@ int cs40l26_firmware_multi_write(const struct device *const dev,
 			return ret;
 		}
 
-		ret = config->bus_io->raw_write(dev, firmware_address, multi_write[i].buf,
-						multi_write[i].len);
+		ret = cs40lxx_raw_burst_write(&config->io_bus, firmware_address, multi_write[i].buf,
+					      multi_write[i].len);
 		if (ret < 0) {
 			return ret;
 		}
 	}
 
 	return 0;
+}
+
+int cs40l26_firmware_poll(const struct device *const dev, const uint32_t firmware_control,
+			  const uint32_t val, const k_timeout_t timeout)
+{
+	const struct cs40l26_config *const config = dev->config;
+	const k_timepoint_t end = sys_timepoint_calc(timeout);
+	uint32_t firmware_address, reg_val;
+	int ret;
+
+	ret = cs40l26_get_firmware_address(dev, firmware_control, &firmware_address);
+	if (ret < 0) {
+		return ret;
+	}
+
+	do {
+		ret = cs40lxx_read(&config->io_bus, firmware_address, &reg_val);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (reg_val == val) {
+			return 0;
+		}
+
+		(void)k_msleep(1);
+	} while (!sys_timepoint_expired(end));
+
+	return -ETIMEDOUT;
 }

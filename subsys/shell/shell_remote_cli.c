@@ -159,12 +159,14 @@ static void cmd_get(struct shell_remote_cli *sh_remote, const struct shell_remot
 	entry = z_shell_cmd_get(msg->parent, msg->idx, &sh_remote->loc);
 
 	if (entry == NULL) {
-		LOG_DBG("Command not found parent:%s, idx:%d", msg->parent->syntax, msg->idx);
+		LOG_DBG("Command not found parent:%s, idx:%d",
+			msg->parent ? msg->parent->syntax : "NULL", msg->idx);
 		cmd_result(&sh_remote->ept, -ENODEV);
 		/* Failed to get the command. */
 		return;
 	} else if (strlen(entry->syntax) == 0) {
-		LOG_DBG("Empty syntax, parent:%s, idx:%d", msg->parent->syntax, msg->idx);
+		LOG_DBG("Empty syntax, parent:%s, idx:%d",
+			msg->parent ? msg->parent->syntax : "NULL", msg->idx);
 		cmd_result(&sh_remote->ept, -ENOEXEC);
 		/* Command is empty. */
 		return;
@@ -339,7 +341,7 @@ static void ep_recv(const void *data, size_t len, void *priv)
 {
 	struct shell_remote_cli *sh_remote = priv;
 
-	/* Shell print operations are acknoledged by sending a result message. */
+	/* Shell print operations are acknowledged by sending a result message. */
 	if (((struct shell_remote_msg_generic *)data)->id == SHELL_REMOTE_MSG_RESULT) {
 #ifdef CONFIG_MULTITHREADING
 		k_sem_give(&sh_remote->sem);

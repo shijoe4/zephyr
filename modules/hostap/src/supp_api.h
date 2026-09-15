@@ -21,7 +21,7 @@
 #define MAC_STR_LEN 18 /* for ':' or '-' separated MAC address string */
 #define CHAN_NUM_LEN 6 /* for space-separated channel numbers string */
 
-enum wifi_frequency_bands wpas_band_to_zephyr(enum wpa_radio_work_band band);
+enum wifi_frequency_bands wpas_freq_to_zephyr_band(int freq);
 
 enum wifi_wpa3_enterprise_type wpas_key_mgmt_to_zephyr_wpa3_ent(int key_mgmt);
 
@@ -154,15 +154,6 @@ int supplicant_11k_neighbor_request(const struct device *dev, struct net_if *ifa
  */
 int supplicant_candidate_scan(const struct device *dev, struct net_if *iface,
 			      struct wifi_scan_params *params);
-
-/** Send 11r roaming request
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param iface Network interface to use
- *
- * @return 0 if ok, < 0 if error
- */
-int supplicant_11r_roaming(const struct device *dev, struct net_if *iface);
 #endif
 
 /**

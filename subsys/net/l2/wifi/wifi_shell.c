@@ -39,6 +39,11 @@ LOG_MODULE_REGISTER(net_wifi_shell, LOG_LEVEL_INF);
 #include <zephyr/net/wifi_certs.h>
 #endif
 
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT
+#include "utils/common.h"
+#include "sha1.h"
+#endif
+
 #define WIFI_SHELL_MODULE "wifi"
 
 #define WIFI_SHELL_MGMT_EVENTS (            \
@@ -161,12 +166,14 @@ static struct net_if *get_iface(enum iface_type type, int argc, char *argv[])
 			return NULL;
 		}
 
-		/* If iface nm wifi type match input type */
-		if ((type == IFACE_TYPE_STA && !wifi_nm_iface_is_sta(iface)) ||
-			(type == IFACE_TYPE_SAP && !wifi_nm_iface_is_sap(iface))) {
-			LOG_ERR("Interface %d type does not match %d", resolved_iface_index, type);
-			return NULL;
-		}
+		/*
+		 * Don't reject the interface based on its current NM role. A
+		 * single VIF moves between STA and SoftAP at runtime, so the
+		 * stored role only reflects what the interface is doing now,
+		 * not what it is allowed to do. Matching against it here breaks
+		 * a STA->SoftAP switch on single-VIF parts. Whether the role
+		 * change is possible is decided by the driver/supplicant.
+		 */
 	}
 #endif
 
@@ -204,6 +211,71 @@ static bool parse_number(const struct shell *sh, long *param, char *str,
 	}
 	*param = num;
 	return true;
+}
+
+static bool parse_number_u64(const struct shell *sh, uint64_t *param, char *str,
+			     char *pname, uint64_t min, uint64_t max)
+{
+	char *endptr;
+	char *str_tmp = str;
+	uint64_t num;
+
+	if ((str_tmp[0] == '0') && (str_tmp[1] == 'x')) {
+		/* Hexadecimal numbers take base 0 in strtoull */
+		num = strtoull(str_tmp, &endptr, 0);
+	} else {
+		num = strtoull(str_tmp, &endptr, 10);
+	}
+
+	if (*endptr != '\0') {
+		PR_ERROR("Invalid number: %s\n", str_tmp);
+		return false;
+	}
+
+	if ((num < min) || (num > max)) {
+		if (pname) {
+			PR_WARNING("%s value out of range: %s, (%llu-%llu)\n",
+				   pname, str_tmp, (unsigned long long)min,
+				   (unsigned long long)max);
+		} else {
+			PR_WARNING("Value out of range: %s, (%llu-%llu)\n",
+				   str_tmp, (unsigned long long)min,
+				   (unsigned long long)max);
+		}
+		return false;
+	}
+	*param = num;
+	return true;
+}
+
+/* TWT interval is encoded per IEEE 802.11 as mantissa * 2^exponent us, with a
+ * 16-bit mantissa and a 5-bit exponent (WIFI_MAX_TWT_EXPONENT). Encode directly
+ * in micro-seconds using the full mantissa range so the whole uint64_t interval
+ * range is representable without floating point.
+ */
+static void twt_us_to_mantissa_exp(uint64_t interval_us, uint16_t *mantissa,
+				   uint8_t *exponent)
+{
+	uint64_t m = interval_us;
+	uint8_t e = 0;
+
+	while (m > UINT16_MAX && e < WIFI_MAX_TWT_EXPONENT) {
+		m >>= 1;
+		e++;
+	}
+
+	/* Saturate if the interval exceeds the encodable maximum. */
+	if (m > UINT16_MAX) {
+		m = UINT16_MAX;
+	}
+
+	*mantissa = (uint16_t)m;
+	*exponent = e;
+}
+
+static uint64_t twt_mantissa_exp_to_us(uint16_t mantissa, uint8_t exponent)
+{
+	return (uint64_t)mantissa << exponent;
 }
 
 static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
@@ -330,6 +402,25 @@ static void handle_wifi_scan_done(struct net_mgmt_event_callback *cb)
 	context.scan_result = 0U;
 }
 
+static void print_ieee80211_codes(const struct shell *sh,
+				  struct net_mgmt_event_callback *cb)
+{
+	const struct wifi_status *status = cb->info;
+
+	/* Not every producer of these events fills in the codes */
+	if (cb->info_length < sizeof(struct wifi_status)) {
+		return;
+	}
+
+	if (status->status_code != 0) {
+		PR("IEEE 802.11 status code %u\n", status->status_code);
+	}
+
+	if (status->reason_code != 0) {
+		PR("IEEE 802.11 reason code %u\n", status->reason_code);
+	}
+}
+
 static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_status *status =
@@ -349,6 +440,7 @@ static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb)
 
 		PR_WARNING("Connection request failed (%s/%d)\n",
 			   wifi_conn_status_txt(st), st);
+		print_ieee80211_codes(sh, cb);
 	} else {
 		PR("Connected\n");
 	}
@@ -378,6 +470,8 @@ static void handle_wifi_disconnect_result(struct net_mgmt_event_callback *cb)
 			PR("Disconnected\n");
 		}
 	}
+
+	print_ieee80211_codes(sh, cb);
 }
 
 static void print_twt_params(uint8_t dialog_token, uint8_t flow_id,
@@ -853,6 +947,7 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 		{"ssid", sys_getopt_required_argument, 0, 's'},
 		{"passphrase", sys_getopt_required_argument, 0, 'p'},
 		{"key-mgmt", sys_getopt_required_argument, 0, 'k'},
+		{"pbkdf2", sys_getopt_no_argument, 0, 'D'},
 		{"ieee-80211w", sys_getopt_required_argument, 0, 'w'},
 		{"bssid", sys_getopt_required_argument, 0, 'm'},
 		{"band", sys_getopt_required_argument, 0, 'b'},
@@ -888,6 +983,7 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 		{"server-cert-domain-exact", sys_getopt_required_argument, 0, 'e'},
 		{"server-cert-domain-suffix", sys_getopt_required_argument, 0, 'x'},
 		{"ssid-protection", sys_getopt_required_argument, 0, 'C'},
+		{"transition-disable", sys_getopt_required_argument, 0, 'd'},
 		{"help", sys_getopt_no_argument, 0, 'h'},
 		{0, 0, 0, 0}};
 	char *endptr;
@@ -905,6 +1001,7 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 	long channel;
 	int key_passwd_cnt = 0;
 	int ret = 0;
+	long val = 0;
 
 	/* Defaults */
 	params->band = WIFI_FREQ_BAND_UNKNOWN;
@@ -916,7 +1013,8 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 	params->bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ;
 	params->verify_peer_cert = false;
 
-	while ((opt = sys_getopt_long(argc, argv, "s:p:k:e:x:w:b:c:m:t:a:B:K:S:C:T:A:V:I:P:g:Rh:i:",
+	while ((opt = sys_getopt_long(argc, argv,
+				  "s:p:k:e:x:w:b:c:m:t:a:B:K:S:C:T:A:V:I:P:g:Rh:i:d:",
 				  long_options, &opt_index)) != -1) {
 		state = sys_getopt_state_get();
 		switch (opt) {
@@ -947,6 +1045,9 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 		case 'p':
 			params->psk = state->optarg;
 			params->psk_length = strlen(params->psk);
+			break;
+		case 'D':
+			params->psk_is_pbkdf2 = true;
 			break;
 		case 'c':
 			channel = strtol(state->optarg, &endptr, 10);
@@ -1102,7 +1203,8 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 			break;
 		case 'V':
 			params->eap_ver = atoi(state->optarg);
-			if (params->eap_ver != 0U && params->eap_ver != 1U) {
+			if (params->eap_ver != 0U && params->eap_ver != 1U &&
+						params->eap_ver != -1) {
 				PR_WARNING("eap_ver error %d\n", params->eap_ver);
 				return -EINVAL;
 			}
@@ -1168,6 +1270,17 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 			params->server_cert_domain_suffix = state->optarg;
 			params->server_cert_domain_suffix_len =
 					strlen(params->server_cert_domain_suffix);
+			break;
+		case 'd':
+			if (iface_mode == WIFI_MODE_AP) {
+				val = shell_strtol(state->optarg, 16, &ret);
+				if (ret || val < 0x01 || val > 0x0F) {
+					PR_WARNING("Invalid transition_disable "
+						 "value (0x01-0x0F)\n");
+					return -EINVAL;
+				}
+				params->transition_disable = (uint8_t)val;
+			}
 			break;
 		case 'h':
 			shell_help(sh);
@@ -1235,6 +1348,35 @@ static int __wifi_args_to_params(const struct shell *sh, size_t argc, char *argv
 	if (params->ignore_broadcast_ssid > 2) {
 		PR_ERROR("Invalid ignore_broadcast_ssid value\n");
 		return -EINVAL;
+	}
+
+	if (params->psk_is_pbkdf2) {
+		/* params->security also required, but hard to enumerate exhaustively */
+		if (params->psk == NULL) {
+			PR_ERROR("--pbkdf2 requires a PSK\n");
+			return -EINVAL;
+		}
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT
+		static uint8_t pbkdf2_precomputed[WIFI_PSK_PBKDF2_KEY_LEN];
+		uint32_t start_ms = k_uptime_get_32();
+
+		/* Precompute the PBKDF2 output */
+		PR("Starting computation of PBKDF2 output\n");
+		ret = pbkdf2_sha1(params->psk, params->ssid, params->ssid_length, 4096,
+					pbkdf2_precomputed, sizeof(pbkdf2_precomputed));
+		if (ret < 0) {
+			PR_ERROR("PBKDF2 computation failed (%d)\n", ret);
+			return ret;
+		}
+		PR("PBKDF2 computation complete in %u ms\n", k_uptime_get_32() - start_ms);
+
+		/* Overwrite PSK string with the precomputed PBKDF2 output */
+		params->psk = pbkdf2_precomputed;
+		params->psk_length = WIFI_PSK_PBKDF2_KEY_LEN;
+#else
+		PR_ERROR("PBKDF2 computation only supported with WPA Supplicant\n");
+		return -ENOSYS;
+#endif
 	}
 
 	return 0;
@@ -1894,10 +2036,7 @@ static int cmd_wifi_twt_setup_quick(const struct shell *sh, size_t argc,
 	struct wifi_twt_params params = { 0 };
 	int idx = 1;
 	long value;
-	double twt_mantissa_scale = 0.0;
-	double twt_interval_scale = 0.0;
-	uint16_t scale = 1000;
-	int exponent = 0;
+	uint64_t twt_interval;
 
 	context.sh = sh;
 
@@ -1917,17 +2056,18 @@ static int cmd_wifi_twt_setup_quick(const struct shell *sh, size_t argc,
 	}
 	params.setup.twt_wake_interval = (uint32_t)value;
 
-	if (!parse_number(sh, &value, argv[idx++], NULL, 1, WIFI_MAX_TWT_INTERVAL_US)) {
+	if (!parse_number_u64(sh, &twt_interval, argv[idx++], NULL, 1,
+			      WIFI_MAX_TWT_INTERVAL_US)) {
 		return -EINVAL;
 	}
-	params.setup.twt_interval = (uint64_t)value;
+	params.setup.twt_interval = twt_interval;
 
-	/* control the region of mantissa filed */
-	twt_interval_scale = (double)(params.setup.twt_interval / scale);
-	/* derive mantissa and exponent from interval */
-	twt_mantissa_scale = frexp(twt_interval_scale, &exponent);
-	params.setup.twt_mantissa = ceil(twt_mantissa_scale * scale);
-	params.setup.twt_exponent = exponent;
+	/* Derive mantissa and exponent from the interval for drivers that
+	 * consume the encoded form directly.
+	 */
+	twt_us_to_mantissa_exp(params.setup.twt_interval,
+			       &params.setup.twt_mantissa,
+			       &params.setup.twt_exponent);
 
 	if (net_mgmt(NET_REQUEST_WIFI_TWT, iface, &params, sizeof(params))) {
 		PR_WARNING("%s with %s failed, reason : %s\n",
@@ -2038,10 +2178,6 @@ static int twt_args_to_params(const struct shell *sh, size_t argc, char *argv[],
 	int opt_index = 0;
 	struct sys_getopt_state *state;
 	long value;
-	double twt_mantissa_scale = 0.0;
-	double twt_interval_scale = 0.0;
-	uint16_t scale = 1000;
-	int exponent = 0;
 	static const struct sys_getopt_option long_options[] = {
 		{"negotiation-type", sys_getopt_required_argument, 0, 'n'},
 		{"setup-cmd", sys_getopt_required_argument, 0, 'c'},
@@ -2137,11 +2273,11 @@ static int twt_args_to_params(const struct shell *sh, size_t argc, char *argv[],
 			break;
 
 		case 'p':
-			if (!parse_number(sh, &value, state->optarg, NULL, 1,
-					  WIFI_MAX_TWT_INTERVAL_US)) {
+			if (!parse_number_u64(sh, &params->setup.twt_interval,
+					      state->optarg, NULL, 1,
+					      WIFI_MAX_TWT_INTERVAL_US)) {
 				return -EINVAL;
 			}
-			params->setup.twt_interval = (uint64_t)value;
 			break;
 
 		case 'D':
@@ -2186,21 +2322,22 @@ static int twt_args_to_params(const struct shell *sh, size_t argc, char *argv[],
 	if ((params->setup.twt_interval != 0) &&
 	   ((params->setup.twt_exponent != 0) ||
 	   (params->setup.twt_mantissa != 0))) {
-		PR_ERROR("Only one of TWT internal or (mantissa, exponent) should be used\n");
+		PR_ERROR("Only one of TWT interval or (mantissa, exponent) should be used\n");
 		return -EINVAL;
 	}
 
 	if (params->setup.twt_interval) {
-		/* control the region of mantissa filed */
-		twt_interval_scale = (double)(params->setup.twt_interval / scale);
-		/* derive mantissa and exponent from interval */
-		twt_mantissa_scale = frexp(twt_interval_scale, &exponent);
-		params->setup.twt_mantissa = ceil(twt_mantissa_scale * scale);
-		params->setup.twt_exponent = exponent;
+		/* Derive mantissa and exponent from the interval for drivers
+		 * that consume the encoded form directly.
+		 */
+		twt_us_to_mantissa_exp(params->setup.twt_interval,
+				       &params->setup.twt_mantissa,
+				       &params->setup.twt_exponent);
 	} else if ((params->setup.twt_exponent != 0) ||
 		   (params->setup.twt_mantissa != 0)) {
-		params->setup.twt_interval = floor(ldexp(params->setup.twt_mantissa,
-							 params->setup.twt_exponent));
+		params->setup.twt_interval =
+			twt_mantissa_exp_to_us(params->setup.twt_mantissa,
+					       params->setup.twt_exponent);
 	} else {
 		PR_ERROR("Either TWT interval or (mantissa, exponent) is needed\n");
 		return -EINVAL;
@@ -2341,8 +2478,6 @@ static int cmd_wifi_ap_enable(const struct shell *sh, size_t argc,
 		}
 	}
 #endif
-
-	k_mutex_init(&wifi_ap_sta_list_lock);
 
 	ret = net_mgmt(NET_REQUEST_WIFI_AP_ENABLE, iface, &cnx_params,
 		       sizeof(struct wifi_connect_req_params));
@@ -4053,6 +4188,7 @@ static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[
 		{"go-intent", sys_getopt_required_argument, 0, 'g'},
 		{"freq", sys_getopt_required_argument, 0, 'f'},
 		{"join", sys_getopt_no_argument, 0, 'j'},
+		{"persistent_set", sys_getopt_no_argument, 0, 'a'},
 		{"iface", sys_getopt_required_argument, 0, 'i'},
 		{"help", sys_getopt_no_argument, 0, 'h'},
 		{0, 0, 0, 0}
@@ -4063,7 +4199,8 @@ static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[
 
 	if (argc < 3) {
 		PR_ERROR("Usage: wifi p2p connect <MAC address> <pbc|pin> [PIN] "
-			 "[--go-intent=<0-15>] [--freq=<frequency>] [--join]\n");
+			 "[--go-intent=<0-15>] [--freq=<frequency>] [--join] "
+			 "[--persistent_set]\n");
 		return -EINVAL;
 	}
 
@@ -4099,8 +4236,10 @@ static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[
 	params.connect.freq = 0;
 	/* Set default join to false */
 	params.connect.join = false;
+	/* Set default persistent_set to false */
+	params.connect.persistent_set = false;
 
-	while ((opt = sys_getopt_long(argc, argv, "g:f:ji:h", long_options, &opt_index)) != -1) {
+	while ((opt = sys_getopt_long(argc, argv, "g:f:jai:h", long_options, &opt_index)) != -1) {
 		state = sys_getopt_state_get();
 		switch (opt) {
 		case 'g':
@@ -4117,6 +4256,9 @@ static int cmd_wifi_p2p_connect(const struct shell *sh, size_t argc, char *argv[
 			break;
 		case 'j':
 			params.connect.join = true;
+			break;
+		case 'a':
+			params.connect.persistent_set = true;
 			break;
 		case 'i':
 			/* Unused, but parsing to avoid unknown option error */
@@ -4156,6 +4298,7 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 	static const struct sys_getopt_option long_options[] = {
 		{"freq", sys_getopt_required_argument, 0, 'f'},
 		{"persistent", sys_getopt_required_argument, 0, 'p'},
+		{"persistent_set", sys_getopt_no_argument, 0, 'a'},
 		{"ht40", sys_getopt_no_argument, 0, 'h'},
 		{"vht", sys_getopt_no_argument, 0, 'v'},
 		{"he", sys_getopt_no_argument, 0, 'H'},
@@ -4172,6 +4315,7 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 
 	params.oper = WIFI_P2P_GROUP_ADD;
 	params.group_add.freq = 0;
+	params.group_add.persistent_set = false;
 	params.group_add.persistent = -1;
 	params.group_add.ht40 = false;
 	params.group_add.vht = false;
@@ -4179,7 +4323,7 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 	params.group_add.edmg = false;
 	params.group_add.go_bssid_length = 0;
 
-	while ((opt = sys_getopt_long(argc, argv, "f:p:hvHeb:i:?", long_options,
+	while ((opt = sys_getopt_long(argc, argv, "f:ap:hvHeb:i:?", long_options,
 				      &opt_index)) != -1) {
 		state = sys_getopt_state_get();
 		switch (opt) {
@@ -4188,6 +4332,9 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 				return -EINVAL;
 			}
 			params.group_add.freq = (int)val;
+			break;
+		case 'a':
+			params.group_add.persistent_set = true;
 			break;
 		case 'p':
 			if (!parse_number(sh, &val, state->optarg, "persistent", -1, 255)) {
@@ -4228,6 +4375,11 @@ static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *arg
 			PR_ERROR("Invalid option %c\n", state->optopt);
 			return -EINVAL;
 		}
+	}
+
+	if (params.group_add.persistent_set == true) {
+		PR_WARNING("The persistent_set is indicated and parameter -p will be ignored\n");
+		params.group_add.persistent = -1;
 	}
 
 	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
@@ -4429,6 +4581,97 @@ static int cmd_wifi_p2p_power_save(const struct shell *sh, size_t argc, char *ar
 	PR("P2P power save %s\n", power_save_enable ? "enabled" : "disabled");
 	return 0;
 }
+
+static int cmd_wifi_p2p_list_networks(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+	char *buf;
+	int ret;
+
+	context.sh = sh;
+
+	/* Dynamically allocate response buffer to avoid large stack usage */
+	buf = k_malloc(WIFI_P2P_LIST_NETWORKS_BUF_SIZE);
+	if (buf == NULL) {
+		PR_ERROR("Failed to allocate buffer for list_networks\n");
+		return -ENOMEM;
+	}
+	memset(buf, 0, WIFI_P2P_LIST_NETWORKS_BUF_SIZE);
+
+	params.oper = WIFI_P2P_LIST_NETWORKS;
+	params.list_networks.buf = buf;
+	params.list_networks.buf_size = WIFI_P2P_LIST_NETWORKS_BUF_SIZE;
+
+	ret = net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params));
+	if (ret) {
+		PR_WARNING("P2P list_networks request failed\n");
+		k_free(buf);
+		return -ENOEXEC;
+	}
+
+	if (buf[0] == '\0') {
+		PR("No persistent P2P networks stored\n");
+	} else {
+		PR("Stored P2P networks:\n");
+		PR("%s\n", buf);
+	}
+
+	k_free(buf);
+	return 0;
+}
+
+static int cmd_wifi_p2p_persistent_remove(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = get_iface(IFACE_TYPE_STA, argc, argv);
+	struct wifi_p2p_params params = {0};
+	int idx = 1;
+	long val;
+	char *endptr;
+
+	context.sh = sh;
+
+	if (argc < 2) {
+		PR_ERROR("Usage: wifi p2p persistent_remove <network_id|-1>\n"
+			 "  <network_id> : remove a single persistent network by ID (>= 0)\n"
+			 "  all          : remove all saved persistent networks\n");
+		return -EINVAL;
+	}
+
+	params.oper = WIFI_P2P_PERSISTENT_REMOVE;
+
+	/* Accept all (remove all) or >= 0 (remove by ID) */
+	if (strcmp(argv[idx], "all") == 0) {
+		val = -1;
+	} else {
+		val = strtol(argv[idx], &endptr, 10);
+		if (*endptr != '\0' || val < 0) {
+			PR_ERROR("Invalid network_id '%s': must be >= 0\n",
+				 argv[idx]);
+			return -EINVAL;
+		}
+	}
+
+	params.persistent_remove.id = (int)val;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
+		if (params.persistent_remove.id == -1) {
+			PR_WARNING("P2P remove all networks request failed\n");
+		} else {
+			PR_WARNING("P2P persistent_remove network %d failed "
+				   "(network may not exist)\n",
+				   params.persistent_remove.id);
+		}
+		return -ENOEXEC;
+	}
+
+	if (params.persistent_remove.id == -1) {
+		PR("All P2P persistent networks removed\n");
+	} else {
+		PR("P2P persistent network %d removed\n", params.persistent_remove.id);
+	}
+	return 0;
+}
 #endif /* CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P */
 
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_NAN
@@ -4439,6 +4682,33 @@ static int validate_srv_proto_type(int type)
 	    type > WIFI_NAN_SRV_PROTO_CSA_MATTER) {
 		return -EINVAL;
 	}
+	return 0;
+}
+
+/* Convert an SSI hex string into the caller's buffer */
+static int parse_nan_ssi(const struct shell *sh, const char *arg, uint8_t *ssi, size_t ssi_size,
+			 uint16_t *ssi_len)
+{
+	size_t hex_len = strlen(arg);
+
+	if (hex_len == 0) {
+		*ssi_len = 0;
+		return 0;
+	}
+
+	if (hex_len / 2 + hex_len % 2 > ssi_size) {
+		PR_ERROR("SSI is %zu bytes, max %zu (%s)\n",
+			 hex_len / 2 + hex_len % 2, ssi_size,
+			"CONFIG_WIFI_NAN_MAX_SSI_LEN");
+		return -EINVAL;
+	}
+
+	*ssi_len = hex2bin(arg, hex_len, ssi, ssi_size);
+	if (*ssi_len == 0) {
+		PR_ERROR("Invalid SSI hex string\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -4492,17 +4762,13 @@ static int parse_nan_args_publish(const struct shell *sh, size_t argc, char *arg
 			params->publish.freq_list[sizeof(params->publish.freq_list) - 1] = '\0';
 			break;
 		}
-		case 'd': {
-			int ssi_len = hex2bin(state->optarg, strlen(state->optarg),
-					      params->publish.ssi,
-					      sizeof(params->publish.ssi));
-			if (ssi_len < 0) {
-				PR_ERROR("Invalid SSI hex string\n");
+		case 'd':
+			if (parse_nan_ssi(sh, state->optarg, params->publish.ssi,
+					  sizeof(params->publish.ssi),
+					  &params->publish.ssi_len) < 0) {
 				return -EINVAL;
 			}
-			params->publish.ssi_len = ssi_len;
 			break;
-		}
 		case 'u':
 			params->publish.unsolicited = shell_strtol(state->optarg, 10, &ret) != 0;
 			break;
@@ -4585,17 +4851,13 @@ static int parse_nan_args_update_publish(const struct shell *sh, size_t argc, ch
 		case 'n':
 			params->update_publish.publish_id = shell_strtol(state->optarg, 10, &ret);
 			break;
-		case 'd': {
-			int ssi_len = hex2bin(state->optarg, strlen(state->optarg),
-					      params->update_publish.ssi,
-					      sizeof(params->update_publish.ssi));
-			if (ssi_len < 0) {
-				PR_ERROR("Invalid SSI hex string\n");
+		case 'd':
+			if (parse_nan_ssi(sh, state->optarg, params->update_publish.ssi,
+					  sizeof(params->update_publish.ssi),
+					  &params->update_publish.ssi_len) < 0) {
 				return -EINVAL;
 			}
-			params->update_publish.ssi_len = ssi_len;
 			break;
-		}
 		default:
 			PR_ERROR("Invalid option %c\n", state->optopt);
 			return -EINVAL;
@@ -4658,17 +4920,13 @@ static int parse_nan_args_subscribe(const struct shell *sh, size_t argc, char *a
 		case 'f':
 			params->subscribe.freq = shell_strtoul(state->optarg, 10, &ret);
 			break;
-		case 'd': {
-			int ssi_len = hex2bin(state->optarg, strlen(state->optarg),
-					      params->subscribe.ssi,
-					      sizeof(params->subscribe.ssi));
-			if (ssi_len < 0) {
-				PR_ERROR("Invalid SSI hex string\n");
+		case 'd':
+			if (parse_nan_ssi(sh, state->optarg, params->subscribe.ssi,
+					  sizeof(params->subscribe.ssi),
+					  &params->subscribe.ssi_len) < 0) {
 				return -EINVAL;
 			}
-			params->subscribe.ssi_len = ssi_len;
 			break;
-		}
 		default:
 			PR_ERROR("Invalid option %c\n", state->optopt);
 			return -EINVAL;
@@ -4754,17 +5012,13 @@ static int parse_nan_args_transmit(const struct shell *sh, size_t argc, char *ar
 				return -EINVAL;
 			}
 			break;
-		case 'd': {
-			int ssi_len = hex2bin(state->optarg, strlen(state->optarg),
-					      params->transmit.ssi,
-					      sizeof(params->transmit.ssi));
-			if (ssi_len < 0) {
-				PR_ERROR("Invalid SSI hex string\n");
+		case 'd':
+			if (parse_nan_ssi(sh, state->optarg, params->transmit.ssi,
+					  sizeof(params->transmit.ssi),
+					  &params->transmit.ssi_len) < 0) {
 				return -EINVAL;
 			}
-			params->transmit.ssi_len = ssi_len;
 			break;
-		}
 		default:
 			PR_ERROR("Invalid option %c\n", state->optopt);
 			return -EINVAL;
@@ -4786,8 +5040,8 @@ static int parse_nan_args_transmit(const struct shell *sh, size_t argc, char *ar
 /* Common NAN command dispatcher */
 static int cmd_wifi_nan_exec(const struct shell *sh, size_t argc, char *argv[],
 			     struct wifi_nan_params *params,
-			     int (*parse_fn)(const struct shell *, size_t, char **,
-					     struct wifi_nan_params *),
+			     int (*parse_fn)(const struct shell *sh, size_t argc, char **argv,
+					     struct wifi_nan_params *params),
 			     const char *parse_err_msg,
 			     const char *exec_err_msg,
 			     const char *success_msg,
@@ -5152,7 +5406,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 				 "-w --ieee-80211w=<MFP> (optional: needs security type to "
 				 "be specified)\n"
 				 "0:Disable, 1:Optional, 2:Required\n"
-				 "-b --band=<band> (2 -2.6GHz, 5 - 5Ghz, 6 - 6GHz)\n"
+				 "-b --band=<band> (2 - 2.4GHz, 5 - 5Ghz, 6 - 6GHz)\n"
 				 "-m --bssid=<BSSID>\n"
 				 "-g --ignore-broadcast-ssid=<type>. Hide SSID in AP mode.\n"
 				 "0: disabled (default)\n"
@@ -5167,13 +5421,17 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 				 "[-S, --wpa3-enterprise]: WPA3 enterprise mode:\n"
 				 "Default is 0: Not WPA3 enterprise mode\n"
 				 "1:Suite-b mode, 2:Suite-b-192-bit mode, 3:WPA3-enterprise-only mode\n"
-				 "[-V, --eap-version]: 0 or 1. Default 1: eap version 1\n"
+				 "[-V, --eap-version]: Forced eap-version. 0, 1 or -1.\n"
+				 "Default 1: eap version 1. -1: no forced version\n"
 				 "[-I, --eap-id1...--eap-id8]: Client Identity. Default no eap identity\n"
 				 "[-P, --eap-pwd1...--eap-pwd8]: Client Password\n"
 				 "Default no password for eap user\n"
 				 "[-C, --ssid-protection]: Whether to use SSID protection in\n"
-				 "4-way handshake: 0:Disable, 1:Enable"),
-		      cmd_wifi_ap_enable, 2, 49),
+				 "4-way handshake: 0:Disable, 1:Enable\n"
+				 "[-d, --transition-disable=<bitmap>]: WPA3 Transition Disable\n"
+				 "Bit0=WPA3-Personal, Bit1=WPA3-Personal SAE-PK,\n"
+				 "Bit2=WPA3-Enterprise, Bit3=OWE"),
+		      cmd_wifi_ap_enable, 2, 51),
 	SHELL_CMD_ARG(stations, NULL,
 		      SHELL_HELP("List stations connected to the AP",
 				 "[-i, --iface=<interface index>]"),
@@ -5290,6 +5548,7 @@ SHELL_SUBCMD_ADD((wifi), connect, NULL,
 			    "7:EAP-TLS, 8:WEP, 9:WPA-PSK, 10:WPA-Auto-Personal, 11:DPP, "
 			    "12:EAP-PEAP-MSCHAPv2, 13:EAP-PEAP-GTC, 14:EAP-TTLS-MSCHAPv2, "
 			    "15:EAP-PEAP-TLS, 20:SAE-EXT-KEY, 21:WEP-OPEN, 22:WEP-SHARED\n"
+			    "[--pbkdf2] Precompute PBKDF2 credentials (valid only for PSK types)\n"
 			    "[-w, --ieee-80211w]: MFP (optional: needs security type to be "
 			    "specified): 0:Disable, 1:Optional, 2:Required\n"
 			    "[-m, --bssid]: MAC address of the AP (BSSID)\n"
@@ -5302,12 +5561,13 @@ SHELL_SUBCMD_ADD((wifi), connect, NULL,
 			    "Default is 0. 0:No WPA3 enterprise mode, "
 			    "1:Suite-b mode, 2:Suite-b-192-bit mode, 3:WPA3-enterprise-only mode\n"
 			    "[-T, --TLS-cipher]: 0:TLS-NONE, 1:TLS-ECC-P384, 2:TLS-RSA-3K\n"
-			    "[-A, --verify-peer-cert]: apply for EAP-PEAP-MSCHAPv2 and "
-			    "EAP-TTLS-MSCHAPv2\n"
+			    "[-A, --verify-peer-cert]: apply for EAP-PEAP-MSCHAPv2, "
+			    "EAP-PEAP-GTC and EAP-TTLS-MSCHAPv2\n"
 			    "Default is 0. 0:do not use CA to verify peer, "
 			    "1:use CA to verify peer\n"
-			    "[-V, --eap-version]: 0 or 1. Default is 1: use eap version 1\n"
-			    "[-I, --eap-id1]: Client Identity. Default is no eap identity\n"
+				"[-V, --eap-version]: Forced eap-version. 0, 1 or -1.\n"
+				"Default 1: eap version 1. -1: no forced version\n"
+				"[-I, --eap-id1]: Client Identity. Default is no eap identity\n"
 			    "[-P, --eap-pwd1]: Client Password. "
 			    "Default is no password for eap user\n"
 			    "[-R, --ieee-80211r]: Use IEEE80211R fast BSS transition connect\n"
@@ -5318,7 +5578,7 @@ SHELL_SUBCMD_ADD((wifi), connect, NULL,
 			    "[-C, --ssid-protection]: Whether to use SSID protection in\n"
 			    "4-way handshake: 0:Disable, 1:Enable"),
 		 cmd_wifi_connect,
-		 2, 48);
+		 2, 49);
 
 SHELL_SUBCMD_ADD((wifi), disconnect, NULL,
 		 SHELL_HELP("Disconnect from the Wi-Fi AP",
@@ -5533,6 +5793,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 				 "[PIN]: 8-digit PIN (optional, generates if omitted)\n"
 				 "[-g, --go-intent=<0-15>]: GO intent "
 				 "(0=client, 15=GO, default: 0)\n"
+				 "[-a, --persistent_set]: Add persistent group\n"
 				 "[-f, --freq=<frequency>]: Frequency in MHz (default: 2462)\n"
 				 "[-j, --join]: Join an existing group (as a client) "
 				 "instead of starting GO negotiation\n"
@@ -5542,13 +5803,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 				 "(uses PIN)\n"
 				 "wifi p2p connect f4:ce:36:01:00:38 pbc --join  "
 				 "(join existing group)"),
-		      cmd_wifi_p2p_connect, 3, 6),
+		      cmd_wifi_p2p_connect, 3, 7),
 	SHELL_CMD_ARG(group_add, NULL,
 		      SHELL_HELP("Add a P2P group (start as GO)",
 				 "[-i, --iface=<interface index>]\n"
 				 "[-f, --freq=<MHz>]: Frequency in MHz (0 = auto)\n"
 				 "[-p, --persistent=<id>]: Persistent group ID "
 				 "(-1 = not persistent)\n"
+				 "[-a, --persistent_set]: Add persistent group\n"
 				 "[-h, --ht40]: Enable HT40\n"
 				 "[-v, --vht]: Enable VHT (also enables HT40)\n"
 				 "[-H, --he]: Enable HE\n"
@@ -5580,6 +5842,20 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 				 "<on>: Enable P2P power save\n"
 				 "<off>: Disable P2P power save"),
 		      cmd_wifi_p2p_power_save, 2, 3),
+	SHELL_CMD_ARG(list_networks, NULL,
+		      SHELL_HELP("List stored persistent P2P networks",
+				 "[-i, --iface=<interface index>]"),
+		      cmd_wifi_p2p_list_networks, 1, 2),
+	SHELL_CMD_ARG(persistent_remove, NULL,
+		      SHELL_HELP("Remove P2P persistent network(s)",
+				 "[-i, --iface=<interface index>]\n"
+				 "<network_id|all>\n"
+				 "  <network_id> : Remove a single persistent network by ID (>= 0).\n"
+				 "  all           : Remove all saved persistent networks.\n"
+				 "Examples:\n"
+				 "  wifi p2p persistent_remove 0\n"
+				 "  wifi p2p persistent_remove all"),
+		      cmd_wifi_p2p_persistent_remove, 2, 3),
 	SHELL_SUBCMD_SET_END
 );
 

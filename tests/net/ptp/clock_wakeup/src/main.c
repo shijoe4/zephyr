@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2026 Philipp Steiner
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -29,10 +29,13 @@ static int fake_eventfd_create_calls;
 static int fake_eventfd_write_calls;
 static int fake_eventfd_last_fd;
 static zvfs_eventfd_t fake_eventfd_last_value;
+static int fake_work_submit_calls;
+static struct k_work *fake_work_submit_last;
 static int fake_ptp_clock_get_calls;
 static int fake_ptp_clock_set_calls;
 static int fake_ptp_clock_rate_adjust_calls;
 static int fake_ptp_clock_get_ret;
+static int fake_ptp_clock_get_second_ret;
 static int fake_ptp_clock_set_ret;
 static int fake_ptp_clock_rate_adjust_ret;
 static double fake_ptp_clock_last_rate_ratio;
@@ -71,6 +74,14 @@ static int fake_zvfs_eventfd_read(int fd, zvfs_eventfd_t *value)
 	return 0;
 }
 
+static int fake_k_work_submit(struct k_work *work)
+{
+	fake_work_submit_calls++;
+	fake_work_submit_last = work;
+
+	return 1;
+}
+
 static struct net_if *fake_net_if_get_first_by_type(const struct net_l2 *l2)
 {
 	ARG_UNUSED(l2);
@@ -94,14 +105,18 @@ static const struct device *fake_net_eth_get_ptp_clock(struct net_if *iface)
 
 static int fake_ptp_clock_get(const struct device *dev, struct net_ptp_time *tm)
 {
+	int ret;
+
 	ARG_UNUSED(dev);
 
 	fake_ptp_clock_get_calls++;
-	if (tm) {
+	ret = fake_ptp_clock_get_calls == 2 ? fake_ptp_clock_get_second_ret
+					    : fake_ptp_clock_get_ret;
+	if (ret == 0 && tm != NULL) {
 		*tm = fake_ptp_clock_time;
 	}
 
-	return fake_ptp_clock_get_ret;
+	return ret;
 }
 
 static int fake_ptp_clock_set(const struct device *dev, struct net_ptp_time *tm)
@@ -190,6 +205,15 @@ int ptp_transport_send(struct ptp_port *port, struct ptp_msg *msg, enum ptp_sock
 	return 0;
 }
 
+int ptp_transport_sendto(struct ptp_port *port, struct ptp_msg *msg, enum ptp_socket idx)
+{
+	ARG_UNUSED(port);
+	ARG_UNUSED(msg);
+	ARG_UNUSED(idx);
+
+	return 0;
+}
+
 int ptp_port_management_resp(struct ptp_port *port, struct ptp_msg *req, struct ptp_tlv_mgmt *tlv)
 {
 	ARG_UNUSED(port);
@@ -224,6 +248,7 @@ int ptp_port_management_msg_process(struct ptp_port *port, struct ptp_port *send
 #define zvfs_eventfd             fake_zvfs_eventfd
 #define zvfs_eventfd_write       fake_zvfs_eventfd_write
 #define zvfs_eventfd_read        fake_zvfs_eventfd_read
+#define k_work_submit            fake_k_work_submit
 #define net_if_get_first_by_type fake_net_if_get_first_by_type
 #define net_if_get_link_addr     fake_net_if_get_link_addr
 #define net_eth_get_ptp_clock    fake_net_eth_get_ptp_clock
@@ -237,6 +262,7 @@ int ptp_port_management_msg_process(struct ptp_port *port, struct ptp_port *send
 #undef net_eth_get_ptp_clock
 #undef net_if_get_link_addr
 #undef net_if_get_first_by_type
+#undef k_work_submit
 #undef zvfs_eventfd_read
 #undef zvfs_eventfd_write
 #undef zvfs_eventfd
@@ -252,10 +278,13 @@ static void reset_clock_state(void)
 	fake_eventfd_write_calls = 0;
 	fake_eventfd_last_fd = -1;
 	fake_eventfd_last_value = 0;
+	fake_work_submit_calls = 0;
+	fake_work_submit_last = NULL;
 	fake_ptp_clock_get_calls = 0;
 	fake_ptp_clock_set_calls = 0;
 	fake_ptp_clock_rate_adjust_calls = 0;
 	fake_ptp_clock_get_ret = 0;
+	fake_ptp_clock_get_second_ret = 0;
 	fake_ptp_clock_set_ret = 0;
 	fake_ptp_clock_rate_adjust_ret = 0;
 	fake_ptp_clock_last_rate_ratio = 0.0;
@@ -291,6 +320,25 @@ ZTEST(ptp_clock_wakeup, test_pollfd_invalidate_wakes_worker_after_init)
 
 	zassert_false(ptp_clk.pollfd_valid, "pollfd cache should be invalidated");
 	zassert_equal(fake_eventfd_write_calls, 1, "worker was not woken");
+	zassert_equal(fake_eventfd_last_fd, 17, "unexpected eventfd target");
+	zassert_equal(fake_eventfd_last_value, 1, "unexpected wakeup value");
+}
+
+ZTEST(ptp_clock_wakeup, test_timeout_wakeup_is_deferred)
+{
+	zassert_not_null(ptp_clock_init(), "clock init failed");
+	fake_eventfd_write_calls = 0;
+
+	ptp_clock_signal_timeout();
+
+	zassert_equal(fake_work_submit_calls, 1, "timeout work was not submitted");
+	zassert_equal(fake_work_submit_last, &ptp_clk.timeout_work, "unexpected timeout work item");
+	zassert_equal(fake_eventfd_write_calls, 0,
+		      "eventfd write ran in the timer callback context");
+
+	ptp_clk.timeout_work.handler(&ptp_clk.timeout_work);
+
+	zassert_equal(fake_eventfd_write_calls, 1, "deferred wakeup was not delivered");
 	zassert_equal(fake_eventfd_last_fd, 17, "unexpected eventfd target");
 	zassert_equal(fake_eventfd_last_value, 1, "unexpected wakeup value");
 }
@@ -472,6 +520,40 @@ ZTEST(ptp_clock_wakeup, test_synchronize_uses_phc_time_when_ingress_timestamp_ou
 	zassert_equal(ptp_clk.timestamp.t2, phc_now, "out-of-range ingress should fall back");
 }
 
+ZTEST(ptp_clock_wakeup, test_synchronize_stops_when_phc_read_fails)
+{
+	ptp_clk.phc = &fake_phc;
+	ptp_clk.current_ds.mean_delay = (ptp_timeinterval)100 << 16;
+	ptp_clk.timestamp.t1 = 1234;
+	ptp_clk.timestamp.t2 = 5678;
+	fake_ptp_clock_get_ret = -EIO;
+
+	ptp_clock_synchronize(10000, 9800, true);
+
+	zassert_equal(fake_ptp_clock_get_calls, 1, "PHC time should be sampled once");
+	zassert_equal(ptp_clk.timestamp.t1, 1234, "egress timestamp should remain unchanged");
+	zassert_equal(ptp_clk.timestamp.t2, 5678, "ingress timestamp should remain unchanged");
+	zassert_equal(fake_ptp_clock_set_calls, 0, "failed PHC read should not set the clock");
+	zassert_equal(fake_ptp_clock_rate_adjust_calls, 0,
+		      "failed PHC read should not adjust the clock");
+}
+
+ZTEST(ptp_clock_wakeup, test_pi_servo_uses_configured_gains)
+{
+	const int64_t offset = 1000;
+	const double kp = (double)CONFIG_PTP_SERVO_KP / PTP_SERVO_GAIN_SCALE;
+	const double ki = (double)CONFIG_PTP_SERVO_KI / PTP_SERVO_GAIN_SCALE;
+	double correction;
+
+	correction = ptp_servo_pi(offset);
+	zassert_within(correction, (kp + ki) * offset, 0.000001,
+		       "first PI correction mismatch");
+
+	correction = ptp_servo_pi(offset);
+	zassert_within(correction, (kp + 2.0 * ki) * offset, 0.000001,
+		       "integral accumulation mismatch");
+}
+
 ZTEST(ptp_clock_wakeup, test_synchronize_applies_pi_rate_adjustment)
 {
 	ptp_clk.phc = &fake_phc;
@@ -594,6 +676,24 @@ ZTEST(ptp_clock_wakeup, test_synchronize_hard_steps_large_offset_and_resets_dela
 	zassert_equal(ptp_clk.timestamp.t1, 0, "hard step should clear timestamps");
 	zassert_equal(fake_ptp_clock_rate_adjust_calls, 1, "hard step should reset servo rate");
 	zassert_equal(fake_ptp_clock_last_rate_ratio, 1.0, "servo reset should use nominal rate");
+}
+
+ZTEST(ptp_clock_wakeup, test_synchronize_stops_when_hard_step_phc_read_fails)
+{
+	ptp_clk.phc = &fake_phc;
+	ptp_clk.current_ds.mean_delay = (ptp_timeinterval)100 << 16;
+	fake_ptp_clock_time.second = 10;
+	fake_ptp_clock_time.nanosecond = 500;
+	fake_ptp_clock_get_second_ret = -EIO;
+
+	ptp_clock_synchronize(10ULL * NSEC_PER_SEC + 500, 8ULL * NSEC_PER_SEC, true);
+
+	zassert_equal(fake_ptp_clock_get_calls, 2, "hard step should resample PHC time");
+	zassert_equal(fake_ptp_clock_set_calls, 0, "failed PHC read should prevent hard step");
+	zassert_equal(fake_ptp_clock_rate_adjust_calls, 0,
+		      "failed hard step should not reset the servo");
+	zassert_equal(ptp_clk.current_ds.mean_delay, (ptp_timeinterval)100 << 16,
+		      "failed hard step should preserve mean delay");
 }
 
 ZTEST_SUITE(ptp_clock_wakeup, NULL, NULL, clock_wakeup_before, NULL, NULL);

@@ -18,14 +18,15 @@
 
 LOG_MODULE_REGISTER(entropy, CONFIG_ENTROPY_LOG_LEVEL);
 
-#include "hal/rtc_timer_hal.h"
+#include <hal/rtc_timer_hal.h>
 
 #if defined CONFIG_SOC_SERIES_ESP32S3
 /* If APB clock is 80 MHz, the maximum sampling frequency is around 45 KHz */
 /* 45 KHz reading frequency is the maximum we have tested so far on S3 */
 #define APB_CYCLE_WAIT_NUM (1778)
-#elif defined CONFIG_SOC_SERIES_ESP32C5 || defined CONFIG_SOC_SERIES_ESP32C6
-/* On ESP32C5/C6, we only read one byte at a time, then XOR the value with
+#elif defined CONFIG_SOC_SERIES_ESP32C5 || defined CONFIG_SOC_SERIES_ESP32C61 ||                   \
+	defined CONFIG_SOC_SERIES_ESP32C6
+/* On ESP32C5/C6/C61, we only read one byte at a time, then XOR the value with
  * an asynchronous timer (see code below).
  * The current value translates to a sampling frequency of around 62.5 KHz
  * for reading 8 bit samples, which is the rate at which the RNG was tested,
@@ -36,8 +37,15 @@ LOG_MODULE_REGISTER(entropy, CONFIG_ENTROPY_LOG_LEVEL);
 /* Same reasoning as for ESP32C6, but the CPU frequency on ESP32H2 is 96MHz instead of 160 MHz */
 #define APB_CYCLE_WAIT_NUM (96 * 16)
 #elif defined CONFIG_SOC_SERIES_ESP32P4
-/* On ESP32P4 (ECO5+), the RNG has been tested at around 75 KHz reading frequency */
-#define APB_CYCLE_WAIT_NUM (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 14)
+/* On ESP32P4 (ECO5+), the RNG has been tested at around 75 KHz reading
+ * frequency. Scaled by the default CPU frequency, which is 360 MHz on
+ * rev 1.3 and 400 MHz on rev 3.x.
+ */
+#if defined(CONFIG_SOC_ESP32P4_REV_1_3)
+#define APB_CYCLE_WAIT_NUM (360 * 14)
+#else
+#define APB_CYCLE_WAIT_NUM (400 * 14)
+#endif
 #else
 #define APB_CYCLE_WAIT_NUM (16)
 #endif

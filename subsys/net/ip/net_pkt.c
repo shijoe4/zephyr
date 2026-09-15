@@ -45,7 +45,7 @@ LOG_MODULE_REGISTER(net_pkt, CONFIG_NET_PKT_LOG_LEVEL);
 /* Make sure net_buf data size is large enough that IPv6
  * and possible extensions fit to the network buffer.
  * The check is done using an arbitrarily chosen value 96 by monitoring
- * wireshark traffic to see what the typical header lengts are.
+ * wireshark traffic to see what the typical header lengths are.
  * It is still recommended to use the default value 128 but allow smaller
  * value if really needed.
  */
@@ -190,6 +190,8 @@ static void net_pkt_alloc_add(void *alloc_data, bool is_pkt,
 		net_pkt_allocs[i].alloc_data = alloc_data;
 		net_pkt_allocs[i].func_alloc = func;
 		net_pkt_allocs[i].line_alloc = line;
+		net_pkt_allocs[i].func_free = NULL;
+		net_pkt_allocs[i].line_free = 0;
 
 		return;
 	}
@@ -531,9 +533,6 @@ void net_pkt_unref(struct net_pkt *pkt)
 	atomic_val_t ref;
 
 	if (!pkt) {
-#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
-		NET_ERR("*** ERROR *** pkt %p (%s():%d)", pkt, caller, line);
-#endif
 		return;
 	}
 
@@ -1013,9 +1012,24 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 	do {
 		struct net_buf *new;
 
-		new = net_buf_alloc_fixed(pool, timeout);
-		if (!new) {
-			goto error;
+		/* An allocation that does not block cannot have consumed any
+		 * of the caller's timeout, so only work out how much of it is
+		 * left when the pool was empty and we actually have to wait.
+		 * That keeps the clock out of the common path: with K_NO_WAIT
+		 * the deadline handling in net_buf_alloc_len() short circuits
+		 * too, so nothing below here reads it either.
+		 */
+		new = net_buf_alloc_fixed(pool, K_NO_WAIT);
+		if (new == NULL) {
+			if (K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
+				goto error;
+			}
+
+			new = net_buf_alloc_fixed(pool,
+						  sys_timepoint_timeout(end));
+			if (new == NULL) {
+				goto error;
+			}
 		}
 
 		if (!first && !current) {
@@ -1045,13 +1059,13 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 			size -= current->size;
 		}
 
-		timeout = sys_timepoint_timeout(end);
-
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_FRAG_CHECK_IF_NOT_IN_USE(new, new->ref + 1);
+#endif
 
 		net_pkt_alloc_add(new, false, caller, line);
 
+#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
 		NET_DBG("%s (%s) [%d] frag %p ref %u (%s():%d)",
 			pool2str(pool), get_name(pool), get_frees(pool),
 			new, new->ref, caller, line);
@@ -1067,7 +1081,7 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 	return first;
 error:
 	if (first) {
-		net_buf_unref(first);
+		net_pkt_frag_unref(first);
 	}
 
 #if defined(CONFIG_NET_PKT_ALLOC_STATS)
@@ -1105,15 +1119,19 @@ static struct net_buf *pkt_alloc_buffer(struct net_pkt *pkt,
 
 	buf = net_buf_alloc_len(pool, size + headroom, timeout);
 
-#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
-	NET_FRAG_CHECK_IF_NOT_IN_USE(buf, buf->ref + 1);
-
-	net_pkt_alloc_add(buf, false, caller, line);
-
-	NET_DBG("%s (%s) [%d] frag %p ref %u (%s():%d)",
-		pool2str(pool), get_name(pool), get_frees(pool),
-		buf, buf->ref, caller, line);
+	if (buf) {
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+		NET_FRAG_CHECK_IF_NOT_IN_USE(buf, buf->ref + 1);
 #endif
+
+		net_pkt_alloc_add(buf, false, caller, line);
+
+#if CONFIG_NET_PKT_LOG_LEVEL >= LOG_LEVEL_DBG
+		NET_DBG("%s (%s) [%d] frag %p ref %u (%s():%d)",
+			pool2str(pool), get_name(pool), get_frees(pool),
+			buf, buf->ref, caller, line);
+#endif
+	}
 
 #if defined(CONFIG_NET_PKT_ALLOC_STATS)
 	if (buf) {
@@ -1274,7 +1292,7 @@ void net_pkt_trim_buffer(struct net_pkt *pkt)
 			}
 
 			buf->frags = NULL;
-			net_buf_unref(buf);
+			net_pkt_frag_unref(buf);
 		} else {
 			prev = buf;
 		}
@@ -1588,9 +1606,7 @@ static struct net_pkt *pkt_alloc(struct k_mem_slab *slab, k_timeout_t timeout)
 
 	net_pkt_set_vlan_tag(pkt, NET_VLAN_TAG_UNSPEC);
 
-#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 	net_pkt_alloc_add(pkt, true, caller, line);
-#endif
 
 	net_pkt_cursor_init(pkt);
 
@@ -1726,7 +1742,6 @@ pkt_alloc_with_buffer(struct k_mem_slab *slab,
 		      k_timeout_t timeout)
 #endif
 {
-	k_timepoint_t end = sys_timepoint_calc(timeout);
 	struct net_pkt *pkt;
 	int ret;
 
@@ -1737,19 +1752,40 @@ pkt_alloc_with_buffer(struct k_mem_slab *slab,
 	NET_DBG("On iface %d (%p) size %zu", net_if_get_by_iface(iface), iface, size);
 #endif /* CONFIG_NET_RAW_MODE */
 
+	/* As in pkt_alloc_buffer(), take the slab without waiting first. When
+	 * that works none of the caller's timeout has gone, so it can be
+	 * handed to the buffer allocation untouched and the clock stays out
+	 * of the common path entirely.
+	 */
 #if NET_LOG_LEVEL >= LOG_LEVEL_DBG
-	pkt = pkt_alloc_on_iface(slab, iface, timeout, caller, line);
+	pkt = pkt_alloc_on_iface(slab, iface, K_NO_WAIT, caller, line);
 #else
-	pkt = pkt_alloc_on_iface(slab, iface, timeout);
+	pkt = pkt_alloc_on_iface(slab, iface, K_NO_WAIT);
 #endif
 
-	if (!pkt) {
-		return NULL;
+	if (pkt == NULL) {
+		k_timepoint_t end;
+
+		if (K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
+			return NULL;
+		}
+
+		end = sys_timepoint_calc(timeout);
+
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
+		pkt = pkt_alloc_on_iface(slab, iface, timeout, caller, line);
+#else
+		pkt = pkt_alloc_on_iface(slab, iface, timeout);
+#endif
+		if (pkt == NULL) {
+			return NULL;
+		}
+
+		/* Waiting for the slab used up part of the caller's budget. */
+		timeout = sys_timepoint_timeout(end);
 	}
 
 	net_pkt_set_family(pkt, family);
-
-	timeout = sys_timepoint_timeout(end);
 #if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 	ret = net_pkt_alloc_buffer_debug(pkt, size, proto, timeout,
 					 caller, line);
@@ -1900,26 +1936,22 @@ static int net_pkt_cursor_operate(struct net_pkt *pkt,
 {
 	/* We use such variable to avoid lengthy lines */
 	struct net_pkt_cursor *c_op = &pkt->cursor;
+	const bool ow = net_pkt_is_being_overwritten(pkt);
+	const bool append = write && !ow;
 
 	while ((c_op->buf != NULL) && (length > 0U)) {
-		size_t d_len, len;
+		size_t limit, d_len, len;
 
-		pkt_cursor_advance(pkt, net_pkt_is_being_overwritten(pkt) ?
-				   false : write);
-		if (c_op->buf == NULL) {
-			break;
-		}
-
-		if (write && !net_pkt_is_being_overwritten(pkt)) {
-			d_len = net_buf_max_len(c_op->buf);
-		} else {
-			d_len = c_op->buf->len;
-		}
-
-		d_len -= c_op->pos - c_op->buf->data;
+		/* Compute the fragment limit only once per fragment */
+		limit = append ? net_buf_max_len(c_op->buf) : c_op->buf->len;
+		d_len = limit - (c_op->pos - c_op->buf->data);
 
 		if (d_len == 0U) {
-			break;
+			/* End of this fragment reached, move to the next
+			 * non-empty one.
+			 */
+			pkt_cursor_jump(pkt, append);
+			continue;
 		}
 
 		len = MIN(length, d_len);
@@ -1934,11 +1966,21 @@ static int net_pkt_cursor_operate(struct net_pkt *pkt,
 			}
 		}
 
-		if (write && !net_pkt_is_being_overwritten(pkt)) {
+		if (append) {
 			net_buf_add(c_op->buf, len);
 		}
 
-		pkt_cursor_update(pkt, len, write);
+		/* Update the cursor: when the end of the fragment has been
+		 * reached, jump to the next non-empty one, except in
+		 * overwrite mode when the fragment still has room for
+		 * subsequent appends.
+		 */
+		if (len == d_len &&
+		    !(ow && c_op->buf->len < net_buf_max_len(c_op->buf))) {
+			pkt_cursor_jump(pkt, append);
+		} else {
+			c_op->pos += len;
+		}
 
 		if (copy && (data != NULL)) {
 			data = (uint8_t *) data + len;
@@ -2138,9 +2180,7 @@ static void clone_pkt_attributes(struct net_pkt *pkt, struct net_pkt *clone_pkt)
 	net_pkt_set_orig_iface(clone_pkt, net_pkt_orig_iface(pkt));
 	net_pkt_set_captured(clone_pkt, net_pkt_is_captured(pkt));
 	net_pkt_set_eof(clone_pkt, net_pkt_eof(pkt));
-	net_pkt_set_ptp(clone_pkt, net_pkt_is_ptp(pkt));
 	net_pkt_set_ppp(clone_pkt, net_pkt_is_ppp(pkt));
-	net_pkt_set_lldp(clone_pkt, net_pkt_is_lldp(pkt));
 	net_pkt_set_ipv4_acd(clone_pkt, net_pkt_ipv4_acd(pkt));
 	net_pkt_set_tx_timestamping(clone_pkt, net_pkt_is_tx_timestamping(pkt));
 	net_pkt_set_rx_timestamping(clone_pkt, net_pkt_is_rx_timestamping(pkt));
@@ -2338,6 +2378,17 @@ int net_pkt_pull(struct net_pkt *pkt, size_t length)
 			rem = length;
 		}
 
+		if (rem < left && c_op->pos == c_op->buf->data) {
+			/* Pulling from the front of the fragment: advance
+			 * the data pointer instead of moving the remaining
+			 * payload down.
+			 */
+			(void)net_buf_pull(c_op->buf, rem);
+			c_op->pos = c_op->buf->data;
+			length -= rem;
+			continue;
+		}
+
 		c_op->buf->len -= rem;
 		left -= rem;
 		if (left) {
@@ -2348,7 +2399,7 @@ int net_pkt_pull(struct net_pkt *pkt, size_t length)
 			if (buf) {
 				pkt->buffer = buf->frags;
 				buf->frags = NULL;
-				net_buf_unref(buf);
+				net_pkt_frag_unref(buf);
 			}
 
 			net_pkt_cursor_init(pkt);

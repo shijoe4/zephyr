@@ -16,10 +16,13 @@
 #include <zephyr/toolchain.h>
 #include <wait_q.h>
 #include <ksched.h>
+#include <scheduler.h>
 #include <zephyr/init.h>
 #include <zephyr/internal/syscall_handler.h>
 #include <kernel_internal.h>
 #include <zephyr/sys/check.h>
+
+BUILD_ASSERT(SYS_SFLIST_FLAG_BITS >= 1, "k_queue needs one sflist flag bit");
 
 struct alloc_node {
 	sys_sfnode_t node;
@@ -78,13 +81,7 @@ static inline void z_vrfy_k_queue_init(struct k_queue *queue)
 #include <zephyr/syscalls/k_queue_init_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
-static void prepare_thread_to_run(struct k_thread *thread, void *data)
-{
-	z_thread_return_value_set_with_data(thread, 0, data);
-	z_ready_thread(thread);
-}
-
-static inline bool handle_poll_events(struct k_queue *queue, uint32_t state)
+static inline bool queue_handle_poll_events(struct k_queue *queue, uint32_t state)
 {
 #ifdef CONFIG_POLL
 	return z_handle_obj_poll_events(&queue->poll_events, state);
@@ -101,17 +98,13 @@ void z_impl_k_queue_cancel_wait(struct k_queue *queue)
 	SYS_PORT_TRACING_OBJ_FUNC(k_queue, cancel_wait, queue);
 
 	k_spinlock_key_t key = k_spin_lock(&queue->lock);
-	struct k_thread *first_pending_thread;
 	bool resched = false;
 
-	first_pending_thread = z_unpend_first_thread(&queue->wait_q);
-
-	if (first_pending_thread != NULL) {
+	if (z_sched_wake(&queue->wait_q, 0, NULL)) {
 		resched = true;
-		prepare_thread_to_run(first_pending_thread, NULL);
 	}
 
-	resched = handle_poll_events(queue, K_POLL_STATE_CANCELLED) || resched;
+	resched = queue_handle_poll_events(queue, K_POLL_STATE_CANCELLED) || resched;
 
 	if (resched) {
 		z_reschedule(&queue->lock, key);
@@ -137,7 +130,6 @@ static inline void z_vrfy_k_queue_cancel_wait(struct k_queue *queue)
 static int32_t queue_insert(struct k_queue *queue, void *prev, void *data,
 			    bool alloc, bool is_append, k_spinlock_key_t key)
 {
-	struct k_thread *first_pending_thread;
 	int32_t result = 0;
 	bool resched = false;
 
@@ -146,12 +138,9 @@ static int32_t queue_insert(struct k_queue *queue, void *prev, void *data,
 	if (is_append) {
 		prev = sys_sflist_peek_tail(&queue->data_q);
 	}
-	first_pending_thread = z_unpend_first_thread(&queue->wait_q);
 
-	if (unlikely(first_pending_thread != NULL)) {
+	if (z_sched_wake(&queue->wait_q, 0, data)) {
 		SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_queue, queue_insert, queue, alloc, K_FOREVER);
-
-		prepare_thread_to_run(first_pending_thread, data);
 		resched = true;
 		goto out;
 	}
@@ -173,7 +162,7 @@ static int32_t queue_insert(struct k_queue *queue, void *prev, void *data,
 	}
 
 	sys_sflist_insert(&queue->data_q, prev, data);
-	resched = handle_poll_events(queue, K_POLL_STATE_DATA_AVAILABLE);
+	resched = queue_handle_poll_events(queue, K_POLL_STATE_DATA_AVAILABLE);
 
 out:
 	if (resched) {
@@ -274,26 +263,19 @@ int k_queue_append_list(struct k_queue *queue, void *head, void *tail)
 	}
 
 	k_spinlock_key_t key = k_spin_lock(&queue->lock);
-	struct k_thread *thread = NULL;
 
-	if (head != NULL) {
-		thread = z_unpend_first_thread(&queue->wait_q);
-	}
-
-	while ((head != NULL) && (thread != NULL)) {
+	while ((head != NULL) && z_sched_wake(&queue->wait_q, 0, head)) {
 		resched = true;
-		prepare_thread_to_run(thread, head);
 		head = *(void **)head;
-		thread = z_unpend_first_thread(&queue->wait_q);
 	}
 
 	if (head != NULL) {
 		sys_sflist_append_list(&queue->data_q, head, tail);
+
+		resched = queue_handle_poll_events(queue, K_POLL_STATE_DATA_AVAILABLE) || resched;
 	}
 
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_queue, append_list, queue, 0);
-
-	resched = handle_poll_events(queue, K_POLL_STATE_DATA_AVAILABLE) || resched;
 
 	if (resched) {
 		z_reschedule(&queue->lock, key);
@@ -358,8 +340,6 @@ void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 		return data;
 	}
 
-	SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_queue, get, queue, timeout);
-
 	if (K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
 		k_spin_unlock(&queue->lock, key);
 
@@ -367,6 +347,8 @@ void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 
 		return NULL;
 	}
+
+	SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_queue, get, queue, timeout);
 
 	int ret = z_pend_curr(&queue->lock, key, &queue->wait_q, timeout);
 
@@ -376,11 +358,27 @@ void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 	return (ret != 0) ? NULL : _current->base.swap_data;
 }
 
+/* Remove a queue item by its data pointer and free any wrapper node. */
 bool k_queue_remove(struct k_queue *queue, void *data)
 {
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_queue, remove, queue);
 	k_spinlock_key_t key = k_spin_lock(&queue->lock);
-	bool ret = sys_sflist_find_and_remove(&queue->data_q, (sys_sfnode_t *)data);
+	sys_sfnode_t *prev = NULL;
+	sys_sfnode_t *node = sys_sflist_peek_head(&queue->data_q);
+	bool ret = false;
+
+	while (node != NULL) {
+		void *peeked = z_queue_node_peek(node, false);
+
+		if (peeked == data) {
+			sys_sflist_remove(&queue->data_q, prev, node);
+			(void)z_queue_node_peek(node, true);
+			ret = true;
+			break;
+		}
+		prev = node;
+		node = sys_sflist_peek_next(node);
+	}
 
 	k_spin_unlock(&queue->lock, key);
 
@@ -470,46 +468,10 @@ static inline void *z_vrfy_k_queue_peek_tail(struct k_queue *queue)
 
 #ifdef CONFIG_OBJ_CORE_FIFO
 struct k_obj_type _obj_type_fifo;
-
-static int init_fifo_obj_core_list(void)
-{
-	/* Initialize fifo object type */
-
-	z_obj_type_init(&_obj_type_fifo, K_OBJ_TYPE_FIFO_ID,
-			offsetof(struct k_fifo, obj_core));
-
-	/* Initialize and link statically defined fifos */
-
-	STRUCT_SECTION_FOREACH(k_fifo, fifo) {
-		k_obj_core_init_and_link(K_OBJ_CORE(fifo), &_obj_type_fifo);
-	}
-
-	return 0;
-}
-
-SYS_INIT(init_fifo_obj_core_list, PRE_KERNEL_1,
-	 CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
+K_OBJ_TYPE_DEFINE(_obj_type_fifo, k_fifo, K_OBJ_TYPE_FIFO_ID, NULL);
 #endif /* CONFIG_OBJ_CORE_FIFO */
 
 #ifdef CONFIG_OBJ_CORE_LIFO
 struct k_obj_type _obj_type_lifo;
-
-static int init_lifo_obj_core_list(void)
-{
-	/* Initialize lifo object type */
-
-	z_obj_type_init(&_obj_type_lifo, K_OBJ_TYPE_LIFO_ID,
-			offsetof(struct k_lifo, obj_core));
-
-	/* Initialize and link statically defined lifo */
-
-	STRUCT_SECTION_FOREACH(k_lifo, lifo) {
-		k_obj_core_init_and_link(K_OBJ_CORE(lifo), &_obj_type_lifo);
-	}
-
-	return 0;
-}
-
-SYS_INIT(init_lifo_obj_core_list, PRE_KERNEL_1,
-	 CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
+K_OBJ_TYPE_DEFINE(_obj_type_lifo, k_lifo, K_OBJ_TYPE_LIFO_ID, NULL);
 #endif /* CONFIG_OBJ_CORE_LIFO */

@@ -525,7 +525,7 @@ static int rtc_stm32_get_value_64(const struct device *dev, uint64_t *ticks)
 #ifdef CONFIG_COUNTER_RTC_STM32_SUBSECONDS
 static void rtc_stm32_set_int_pending(void)
 {
-	NVIC_SetPendingIRQ(DT_INST_IRQN(0));
+	k_irq_set_pending(DT_INST_IRQN(0));
 }
 #endif /* CONFIG_COUNTER_RTC_STM32_SUBSECONDS */
 
@@ -876,7 +876,7 @@ static const struct rtc_stm32_config rtc_config = {
 	.sync_prescaler = DT_INST_PROP_OR(0, sync_prescaler, RTC_SYNCPRE),
 #endif /* !CONFIG_SOC_SERIES_STM32F1X */
 #elif DT_INST_CLOCKS_CELL_BY_IDX(0, 1, bus) == STM32_SRC_HSE
-	.async_prescaler = DT_INST_PROP_OR(0, async_prescaler, _HSE_ASYNC_PRESCALER - 1),
+	.async_prescaler = DT_INST_PROP_OR(0, async_prescaler, RTC_HSE_ASYNC_PRESCALER - 1),
 #if !defined(CONFIG_SOC_SERIES_STM32F1X)
 	.sync_prescaler = DT_INST_PROP_OR(0, hse_prescaler, RTC_HSE_SYNC_PRESCALER - 1),
 #endif /* !CONFIG_SOC_SERIES_STM32F1X */

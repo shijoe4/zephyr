@@ -164,12 +164,12 @@ static const unsigned char ipv6_hbho[] = {
 static const unsigned char ipv6_ext_hdr_err_1[] = {
 	/* IPv6 header */
 	0x60, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x40,
-	/* Src IP */
-	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-	/* Dst IP */
+	/* Src IP (peer_addr 2001:db8::2, not one of our own) */
 	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+	/* Dst IP (my_addr 2001:db8::1, delivered locally) */
+	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
 	/* Hop-by-hop option */
 	0x3b, 0x05,
 	/* Padding to reach 48 bytes */
@@ -180,12 +180,12 @@ static const unsigned char ipv6_ext_hdr_err_1[] = {
 static const unsigned char ipv6_ext_hdr_err_2[] = {
 	/* IPv6 header */
 	0x60, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x40,
-	/* Src IP */
-	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-	/* Dst IP */
+	/* Src IP (peer_addr 2001:db8::2, not one of our own) */
 	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+	/* Dst IP (my_addr 2001:db8::1, delivered locally) */
+	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
 	/* Hop-by-hop option */
 	0x3b, 0x00,
 	/* Option PADN */
@@ -198,18 +198,43 @@ static const unsigned char ipv6_ext_hdr_err_2[] = {
 static const unsigned char ipv6_ext_hdr_err_3[] = {
 	/* IPv6 header */
 	0x60, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x40,
-	/* Src IP */
-	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-	/* Dst IP */
+	/* Src IP (peer_addr 2001:db8::2, not one of our own) */
 	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+	/* Dst IP (my_addr 2001:db8::1, delivered locally) */
+	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
 	/* Hop-by-hop option */
 	0x3b, 0x00,
 	/* Option Unknown */
 	0x3f, 0x08,
 	/* Padding to reach 48 bytes */
 	0x00, 0x00, 0x00, 0x00,
+};
+
+/* Scenario 4: Option length bounds-check underflow.
+ * An 8-byte extension header with five Pad1 options brings "length" to 7, so
+ * the final option's opt_len is read from just past the header boundary. The
+ * opt_len byte is kept at 0 so net_pkt_skip() still succeeds, isolating the
+ * bounds-check bypass itself.
+ */
+static const unsigned char ipv6_ext_hdr_err_4[] = {
+	/* IPv6 header */
+	0x60, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x40,
+	/* Src IP (peer_addr 2001:db8::2, not one of our own) */
+	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+	/* Dst IP (my_addr 2001:db8::1, delivered locally) */
+	0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+	/* Hop-by-hop option, No Next Header, hdr_ext_len = 0 -> 8 bytes */
+	0x3b, 0x00,
+	/* Five Pad1 options, advancing length to 7 */
+	0x00, 0x00, 0x00, 0x00, 0x00,
+	/* Non-Pad1 option type at the last byte of the header */
+	0x01,
+	/* Bytes past the header; first is read as opt_len (0) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 /* clang-format on */
@@ -632,6 +657,7 @@ static void nbr_lookup_ok(void)
 static void *ipv6_setup(void)
 {
 	struct net_if_addr *ifaddr = NULL, *ifaddr2;
+	struct net_in6_addr solicited_node_mcast;
 	struct net_if *iface = TEST_NET_IF;
 	struct net_if *iface2 = NULL;
 	struct net_if_ipv6 *ipv6;
@@ -666,6 +692,14 @@ static void *ipv6_setup(void)
 
 	ifaddr2 = net_if_ipv6_addr_lookup(&my_addr, &iface2);
 	zassert_true(ifaddr2 == ifaddr, "Invalid ifaddr (%p vs %p)\n", ifaddr, ifaddr2);
+
+	/* As the address was added by hand above, the solicited-node multicast
+	 * group that net_if_ipv6_addr_add() would have joined (RFC 4291 ch 2.8)
+	 * needs to be joined manually too.
+	 */
+	net_ipv6_addr_create_solicited_node(&my_addr, &solicited_node_mcast);
+	zassert_ok(net_ipv6_mld_join(iface, &solicited_node_mcast),
+		   "Cannot join solicited node multicast group");
 
 	/* The semaphore is there to wait the data to be received. */
 	k_sem_init(&wait_data, 0, UINT_MAX);
@@ -796,59 +830,72 @@ ZTEST(net_ipv6, test_send_ns_no_options)
 		      "Data receive for invalid NS failed.");
 }
 
-ZTEST(net_ipv6, test_ipv6_ext_hdr_len_bounds_1)
+struct ext_hdr_test_case {
+	const char *name;
+	const unsigned char *data;
+	size_t len;
+};
+
+static const struct ext_hdr_test_case ext_hdr_test_cases[] = {
+	{ "exthdr_len_too_long", ipv6_ext_hdr_err_1, sizeof(ipv6_ext_hdr_err_1) },
+	{ "padn_opt_len_too_large", ipv6_ext_hdr_err_2, sizeof(ipv6_ext_hdr_err_2) },
+	{ "unknown_opt_len_too_large", ipv6_ext_hdr_err_3, sizeof(ipv6_ext_hdr_err_3) },
+	{ "opt_len_check_underflow", ipv6_ext_hdr_err_4, sizeof(ipv6_ext_hdr_err_4) },
+};
+
+static const char *ext_hdr_test_name(size_t index, const void *value)
 {
+	const struct ext_hdr_test_case *tc = value;
+
+	ARG_UNUSED(index);
+	return tc->name;
+}
+
+static const struct ztest_param_values ext_hdr_cases = {
+	.values    = ext_hdr_test_cases,
+	.count     = ARRAY_SIZE(ext_hdr_test_cases),
+	.elem_size = sizeof(ext_hdr_test_cases[0]),
+	.name_cb   = ext_hdr_test_name,
+};
+
+/* Feed a malformed extension header packet directly to net_ipv6_input() so the
+ * verdict and drop statistic can be checked synchronously, without the timing
+ * noise of the asynchronous RX path. The packet must be rejected, so it is
+ * dropped and the IPv6 drop count increases by one.
+ */
+ZTEST_P(net_ipv6, test_ipv6_ext_hdr_len_bounds)
+{
+	const struct ext_hdr_test_case *tc = ZTEST_GET_PARAM_PTR(struct ext_hdr_test_case);
+	struct net_stats_ip ipv6_stats_before = { 0 };
+	struct net_stats_ip ipv6_stats_after = { 0 };
+	enum net_verdict verdict;
 	struct net_pkt *pkt;
-	struct net_if *iface;
+	struct net_if *iface = TEST_NET_IF;
 
-	iface = TEST_NET_IF;
-
-	pkt = net_pkt_alloc_with_buffer(iface, sizeof(ipv6_ext_hdr_err_1), NET_AF_UNSPEC, 0,
-					K_FOREVER);
+	pkt = net_pkt_alloc_with_buffer(iface, tc->len, NET_AF_INET6, 0, K_FOREVER);
 
 	NET_ASSERT(pkt, "Out of TX packets");
 
-	net_pkt_write(pkt, ipv6_ext_hdr_err_1, sizeof(ipv6_ext_hdr_err_1));
+	zassert_ok(net_pkt_write(pkt, tc->data, tc->len), "Failed to write packet");
+	net_pkt_cursor_init(pkt);
 	net_pkt_lladdr_clear(pkt);
 
-	zassert_ok(net_recv_data(iface, pkt), "Data receive failed.");
+	zassert_ok(net_mgmt(NET_REQUEST_STATS_GET_IPV6, NULL, &ipv6_stats_before,
+			    sizeof(ipv6_stats_before)),
+		   "Failed to retrieve stats");
+
+	verdict = net_ipv6_input(pkt);
+
+	zassert_ok(net_mgmt(NET_REQUEST_STATS_GET_IPV6, NULL, &ipv6_stats_after,
+			    sizeof(ipv6_stats_after)),
+		   "Failed to retrieve stats");
+
+	zassert_equal(verdict, NET_DROP, "Packet was not dropped: %s", tc->name);
+	zassert_equal(ipv6_stats_before.drop + 1, ipv6_stats_after.drop,
+		      "Packet was not counted as an IPv6 drop: %s", tc->name);
 }
 
-ZTEST(net_ipv6, test_ipv6_ext_hdr_len_bounds_2)
-{
-	struct net_pkt *pkt;
-	struct net_if *iface;
-
-	iface = TEST_NET_IF;
-
-	pkt = net_pkt_alloc_with_buffer(iface, sizeof(ipv6_ext_hdr_err_2), NET_AF_UNSPEC, 0,
-					K_FOREVER);
-
-	NET_ASSERT(pkt, "Out of TX packets");
-
-	net_pkt_write(pkt, ipv6_ext_hdr_err_2, sizeof(ipv6_ext_hdr_err_2));
-	net_pkt_lladdr_clear(pkt);
-
-	zassert_ok(net_recv_data(iface, pkt), "Data receive failed.");
-}
-
-ZTEST(net_ipv6, test_ipv6_ext_hdr_len_bounds_3)
-{
-	struct net_pkt *pkt;
-	struct net_if *iface;
-
-	iface = TEST_NET_IF;
-
-	pkt = net_pkt_alloc_with_buffer(iface, sizeof(ipv6_ext_hdr_err_3), NET_AF_UNSPEC, 0,
-					K_FOREVER);
-
-	NET_ASSERT(pkt, "Out of TX packets");
-
-	net_pkt_write(pkt, ipv6_ext_hdr_err_3, sizeof(ipv6_ext_hdr_err_3));
-	net_pkt_lladdr_clear(pkt);
-
-	zassert_ok(net_recv_data(iface, pkt), "Data receive failed.");
-}
+ZTEST_INSTANTIATE_TEST_SUITE_P(bounds, net_ipv6, test_ipv6_ext_hdr_len_bounds, ext_hdr_cases);
 
 struct test_nd_context {
 	struct k_sem wait_ns;
@@ -947,12 +994,11 @@ ZTEST(net_ipv6, test_send_neighbor_discovery)
 	zassert_equal(pkt_num, 4, "Unexpected number of packets sent (%d)", pkt_num);
 
 	/* If there are anything pending by the NS reply timer, then
-	 * then 1 is returned and we can update the buffer and packet
-	 * counts.
+	 * 1 is returned. A pending timer does not imply that a TX packet or
+	 * buffer is still allocated at this point.
 	 */
 	ret = net_ipv6_nbr_test_cancel();
-	avail_pkt_count -= ret;
-	avail_buf_count -= ret;
+	ARG_UNUSED(ret);
 
 	zassert_equal(k_mem_slab_num_free_get(tx), avail_pkt_count,
 		      "Unexpected tx packet pool free count (%d vs %d)",
@@ -1124,7 +1170,7 @@ static void ra_message(void)
 	/* Check if RDNSS was added correctly. */
 	ctx = dns_resolve_get_default();
 	zassert_equal(ctx->state, DNS_RESOLVE_CONTEXT_ACTIVE);
-	dns_server = (struct net_sockaddr_in6 *)&ctx->servers[0].dns_server;
+	dns_server = net_sin6(net_sad(&ctx->servers[0].dns_server_addr));
 	zassert_equal(dns_server->sin6_family, dns_addr.sin6_family);
 	zassert_equal(dns_server->sin6_port, dns_addr.sin6_port);
 	zassert_mem_equal(&dns_server->sin6_addr, &dns_addr.sin6_addr,
@@ -2429,6 +2475,11 @@ ZTEST(net_ipv6, test_nd_reachability_hint)
 {
 	struct net_nbr *nbr;
 
+	/* Ensure the neighbor exists rather than relying on it surviving from
+	 * an earlier test: interface carrier toggles clear the neighbor cache.
+	 */
+	add_neighbor();
+
 	nbr = net_ipv6_nbr_lookup(TEST_NET_IF, &peer_addr);
 	zassert_not_null(nbr, "Neighbor %s not found in cache\n",
 			 net_sprint_ipv6_addr(&peer_addr));
@@ -2448,6 +2499,64 @@ ZTEST(net_ipv6, test_nd_reachability_hint)
 
 	net_ipv6_nbr_reachability_hint(TEST_NET_IF, &peer_addr);
 	zassert_equal(net_ipv6_nbr_data(nbr)->state, NET_IPV6_NBR_STATE_REACHABLE);
+}
+
+#define DEFAULT_REACHABLE_MS (MSEC_PER_SEC * 30)
+
+static uint32_t expected_reachable_min(uint32_t base)
+{
+	uint32_t min = base / 2U;
+
+	return (min == 0U) ? 1U : min;
+}
+
+static uint32_t expected_reachable_max(uint32_t base)
+{
+	return (3U * base) / 2U;
+}
+
+ZTEST(net_ipv6, test_calc_reachable_time_base_zero)
+{
+	struct net_if_ipv6 ipv6 = { .base_reachable_time = 0U };
+
+	zassert_equal(net_if_ipv6_calc_reachable_time(&ipv6), DEFAULT_REACHABLE_MS);
+}
+
+ZTEST(net_ipv6, test_calc_reachable_time_small_base)
+{
+	struct net_if_ipv6 ipv6 = { .base_reachable_time = 1U };
+
+	zassert_equal(net_if_ipv6_calc_reachable_time(&ipv6), 1U);
+}
+
+ZTEST(net_ipv6, test_calc_reachable_time_in_range)
+{
+	struct net_if_ipv6 ipv6 = { .base_reachable_time = DEFAULT_REACHABLE_MS };
+	uint32_t min = expected_reachable_min(DEFAULT_REACHABLE_MS);
+	uint32_t max = expected_reachable_max(DEFAULT_REACHABLE_MS);
+
+	for (int i = 0; i < 100; i++) {
+		uint32_t reachable = net_if_ipv6_calc_reachable_time(&ipv6);
+
+		zassert_true(reachable >= min, "below min: %u", reachable);
+		zassert_true(reachable < max, "at/above max: %u", reachable);
+	}
+}
+
+ZTEST(net_ipv6, test_set_reachable_time)
+{
+	struct net_if_ipv6 ipv6 = { .base_reachable_time = DEFAULT_REACHABLE_MS };
+	uint32_t min = expected_reachable_min(DEFAULT_REACHABLE_MS);
+	uint32_t max = expected_reachable_max(DEFAULT_REACHABLE_MS);
+
+	net_if_ipv6_set_reachable_time(&ipv6);
+
+	zassert_true(ipv6.reachable_time >= min,
+		     "reachable_time %u below min %u",
+		     ipv6.reachable_time, min);
+	zassert_true(ipv6.reachable_time < max,
+		     "reachable_time %u at/above max %u",
+		     ipv6.reachable_time, max);
 }
 
 static bool is_pe_address_found(struct net_if *iface, struct net_in6_addr *prefix)
@@ -2781,6 +2890,86 @@ ZTEST(net_ipv6, test_na_with_bad_hop_limit)
 	 * which should be dropped.
 	 */
 	test_nd_packet_drop(icmpv6_na_bad_hop_limit, sizeof(icmpv6_na_bad_hop_limit));
+}
+
+/* A malicious Router Advertisement can carry a tiny Reachable Time. Verify the
+ * randomized reachable time never rounds down to 0, which would trip the
+ * "Zero reachable timeout!" assert / break the ND reachable timer.
+ */
+ZTEST(net_ipv6, test_calc_reachable_time_never_zero)
+{
+	struct net_if *iface = TEST_NET_IF;
+	struct net_if_ipv6 *ipv6;
+	uint32_t saved;
+
+	zassert_not_null(iface, "No test interface");
+	zassert_not_null(iface->config.ip.ipv6, "No IPv6 config on interface");
+	ipv6 = iface->config.ip.ipv6;
+	saved = ipv6->base_reachable_time;
+
+	/* base 0 falls back to the default, which is non-zero. */
+	ipv6->base_reachable_time = 0U;
+	zassert_not_equal(net_if_ipv6_calc_reachable_time(ipv6), 0U,
+			  "Reachable time is 0 for base 0");
+
+	/* Small base values must never round down to 0. Loop to exercise the
+	 * random path.
+	 */
+	for (uint32_t base = 1U; base <= 4U; base++) {
+		ipv6->base_reachable_time = base;
+
+		for (int i = 0; i < 16; i++) {
+			uint32_t reachable = net_if_ipv6_calc_reachable_time(ipv6);
+
+			zassert_not_equal(reachable, 0U,
+					  "Reachable time is 0 for base %u", base);
+			zassert_true(reachable <= 3U * base,
+				     "Reachable time %u out of range for base %u",
+				     reachable, base);
+		}
+	}
+
+	/* The largest allowed base must not overflow into a small value. */
+	ipv6->base_reachable_time = NET_IPV6_MAX_REACHABLE_TIME;
+	for (int i = 0; i < 16; i++) {
+		uint32_t reachable = net_if_ipv6_calc_reachable_time(ipv6);
+
+		zassert_true(reachable >= NET_IPV6_MAX_REACHABLE_TIME / 2U,
+			     "Reachable time %u too small at max base", reachable);
+	}
+
+	ipv6->base_reachable_time = saved;
+}
+
+/* The public setter must clamp out-of-range values so that later reachable time
+ * randomization cannot overflow.
+ */
+ZTEST(net_ipv6, test_set_base_reachable_time_clamp)
+{
+	struct net_if *iface = TEST_NET_IF;
+	uint32_t saved;
+
+	zassert_not_null(iface, "No test interface");
+	zassert_not_null(iface->config.ip.ipv6, "No IPv6 config on interface");
+	saved = net_if_ipv6_get_base_reachable_time(iface);
+
+	/* In-range values are stored unchanged. */
+	net_if_ipv6_set_base_reachable_time(iface, 5000U);
+	zassert_equal(net_if_ipv6_get_base_reachable_time(iface), 5000U,
+		      "In-range base reachable time not stored");
+
+	net_if_ipv6_set_base_reachable_time(iface, NET_IPV6_MAX_REACHABLE_TIME);
+	zassert_equal(net_if_ipv6_get_base_reachable_time(iface),
+		      NET_IPV6_MAX_REACHABLE_TIME,
+		      "Base reachable time at limit not stored");
+
+	/* Values above the limit are clamped. */
+	net_if_ipv6_set_base_reachable_time(iface, UINT32_MAX);
+	zassert_equal(net_if_ipv6_get_base_reachable_time(iface),
+		      NET_IPV6_MAX_REACHABLE_TIME,
+		      "Base reachable time not clamped");
+
+	net_if_ipv6_set_base_reachable_time(iface, saved);
 }
 
 ZTEST_SUITE(net_ipv6, NULL, ipv6_setup, ipv6_before, NULL, ipv6_teardown);

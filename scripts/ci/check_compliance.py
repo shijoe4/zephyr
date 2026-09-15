@@ -8,11 +8,13 @@ import argparse
 import collections
 import json
 import logging
+import multiprocessing
 import os
 import platform
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -59,6 +61,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import list_boards
 import list_hardware
 from get_maintainer import Maintainers, MaintainersError
+from list_undocumented_licenses import undocumented
 
 sys.path.insert(
     0, str(Path(__file__).resolve().parents[2] / "scripts" / "dts" / "python-devicetree" / "src")
@@ -474,6 +477,102 @@ class ClangFormatCheck(ComplianceTest):
                     self._process_patch_error(file, patch)
 
 
+class StyleCheckMixin:
+    """
+    Shared plumbing for compliance checks that delegate to a stand-alone style
+    checker script (scripts/.../*_style.py). Such a script prints issues as
+    '<file>:<line>:<col>: [<rule>] <message>' and exits 0 (clean) / 1 (issues
+    found) / anything else (the checker itself failed).
+
+    This is a mixin, not a ComplianceTest subclass, so it is not picked up by
+    inheritors(ComplianceTest) and never runs on its own. Concrete checks inherit
+    from both this and ComplianceTest, and call _check_files() from run().
+    """
+
+    # '<file>:<line>:<col>: [<rule>] <message>'
+    _ISSUE_RE = re.compile(r"^.+:(\d+):(\d+): \[([^\]]+)\] (.*)$")
+
+    def _changed_lines(self, file):
+        # Line numbers touched by the change in 'file' within COMMIT_RANGE.
+        diff = git("diff", "-U0", "--no-color", COMMIT_RANGE, "--", file)
+        changed = set()
+        if not diff.strip():
+            return changed
+        for patch in unidiff.PatchSet.from_string(diff):
+            for hunk in patch:
+                for line in hunk:
+                    if line.is_added and line.target_line_no is not None:
+                        changed.add(line.target_line_no)
+                # A pure deletion adds no lines but can still introduce a style
+                # issue on the lines now surrounding the gap (e.g. removing a
+                # blank line between declarations). With -U0 the deletion sits
+                # between target_start and target_start + 1, so flag both.
+                if hunk.removed:
+                    changed.update((hunk.target_start, hunk.target_start + 1))
+        return changed
+
+    def _check_files(self, tool, file_filter, extra_args=()):
+        # Run 'tool' on each added/modified file matching 'file_filter' and
+        # report issues on changed lines only. 'tool' is a Path; file_filter is a
+        # predicate on the file path string; 'extra_args' are passed to the tool
+        # before the file argument.
+        for file in get_files(filter="d"):
+            if not file_filter(file):
+                continue
+
+            changed = self._changed_lines(file)
+            if not changed:
+                continue
+
+            result = subprocess.run(
+                [sys.executable, str(tool), *extra_args, file],
+                cwd=GIT_TOP,
+                capture_output=True,
+                text=True,
+            )
+
+            # The script returns 0 (clean) or 1 (issues found); anything else, or
+            # any stderr output, means the checker itself failed (e.g. crashed
+            # before it could set its own error exit code).
+            if result.returncode not in (0, 1) or result.stderr.strip():
+                self.error(
+                    f"{tool.name} failed on '{file}' (exit {result.returncode}):\n{result.stderr}"
+                )
+
+            for line in result.stdout.splitlines():
+                m = self._ISSUE_RE.match(line)
+                if not m:
+                    continue
+                lineno, col, rule, message = int(m[1]), int(m[2]), m[3], m[4]
+                if lineno not in changed:
+                    continue
+                self.fmtd_failure(
+                    "error",
+                    f"{self.name} ({rule})",
+                    file,
+                    lineno,
+                    col=col,
+                    desc=message,
+                )
+
+
+class KconfigFormatCheck(StyleCheckMixin, ComplianceTest):
+    """
+    Checks Kconfig files against the formatting style guidelines using
+    scripts/kconfig/kconfig_style.py. Only issues on lines touched by the change
+    are reported, so pre-existing formatting is not flagged.
+    """
+
+    name = "KconfigFormat"
+    doc = zephyr_doc_detail_builder("/contribute/style/kconfig.html")
+
+    def run(self):
+        self._check_files(
+            ZEPHYR_BASE / "scripts" / "kconfig" / "kconfig_style.py",
+            lambda file: "Kconfig" in Path(file).name,
+        )
+
+
 class DevicetreeBindingsCheck(ComplianceTest):
     """
     Checks for devicetree bindings.
@@ -733,6 +832,11 @@ class KconfigCheck(ComplianceTest):
     # Kconfig symbol prefix/namespace.
     CONFIG_ = "CONFIG_"
 
+    # Additional guidance appended to the "Undefined Kconfig symbols" failure
+    # message. Subclasses can override this to describe probable causes
+    # specific to the Kconfig tree being checked.
+    UNDEF_SYMBOL_HINT = ""
+
     def run(self):
         kconf = self.parse_kconfig()
 
@@ -867,10 +971,16 @@ class KconfigCheck(ComplianceTest):
                     ).upper()
                     fp.write('config  ' + board_str + '\n')
                     fp.write('\t bool\n')
-                for board_dir in board.directories:
-                    fp.write(
-                        'source "' + (board_dir / ('Kconfig.' + board.name)).as_posix() + '"\n'
-                    )
+                fp.write(
+                    'source "'
+                    + (board.directories[0] / ('Kconfig.' + board.name)).as_posix()
+                    + '"\n'
+                )
+                if len(board.directories) > 1:
+                    for board_dir in board.directories[1:]:
+                        fp.write(
+                            'osource "' + (board_dir / ('Kconfig.' + board.name)).as_posix() + '"\n'
+                        )
 
         with open(kconfig_file, 'w') as fp:
             for board in v2_boards:
@@ -1409,7 +1519,10 @@ https://docs.zephyrproject.org/latest/build/kconfig/tips.html#menuconfig-symbols
         )
 
         if undef_ref_warnings:
-            self.failure(f"Undefined Kconfig symbols:\n\n {undef_ref_warnings}")
+            msg = f"Undefined Kconfig symbols:\n\n {undef_ref_warnings}"
+            if self.UNDEF_SYMBOL_HINT:
+                msg += f"\n\n{self.UNDEF_SYMBOL_HINT}"
+            self.failure(msg)
 
     def check_soc_name_sync(self, kconf):
         root_args = argparse.Namespace(**{'soc_roots': [ZEPHYR_BASE]})
@@ -1476,7 +1589,7 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
         # Warning: Needs to work with both --perl-regexp and the 're' module
         regex = r"\b" + self.CONFIG_ + r"[A-Z0-9_]+\b(?!\s*##|[$@{(.*])"
 
-        # Skip doc/releases and doc/security/vulnerabilities.rst, which often
+        # Skip doc/releases and doc/security/vulnerabilities, which often
         # reference removed symbols
         grep_stdout = git(
             "grep",
@@ -1489,6 +1602,7 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
             ":!/doc/releases",
             ":!/doc/develop/manifest/external",
             ":!/doc/security/vulnerabilities.rst",
+            ":!/doc/security/vulnerabilities",
             cwd=GIT_TOP,
         )
 
@@ -1614,10 +1728,23 @@ class KconfigHWMv2Check(KconfigBasicCheck):
     """
 
     name = "KconfigHWMv2"
+    doc = zephyr_doc_detail_builder("/hardware/porting/board_porting.html#write-kconfig-files")
 
     # Use dedicated Kconfig board / soc v2 scheme file.
     # This file sources only v2 scheme tree.
     FILENAME = os.path.join(os.path.dirname(__file__), "Kconfig.board.v2")
+
+    UNDEF_SYMBOL_HINT = """\
+This check loads only the board and SoC Kconfig trees (Kconfig.<board> and
+Kconfig.soc files) without the rest of the Zephyr Kconfig tree, because those
+files must be loadable standalone; for example, sysbuild also loads them.
+
+Probable causes of the undefined symbol warnings above:
+- A Kconfig.<board> or Kconfig.soc file references a symbol defined outside
+  the board and SoC Kconfig trees, for example a driver or subsystem symbol.
+  Move the reference to the Kconfig or Kconfig.defconfig file of the board or
+  SoC instead, as those files are only loaded in the full Zephyr Kconfig tree.
+- The symbol name is misspelled, or the file defining it is not sourced."""
 
 
 class SysbuildKconfigCheck(KconfigCheck):
@@ -1868,6 +1995,39 @@ class LicenseAndCopyrightCheck(ComplianceTest):
                 ),
             )
 
+        self._check_documented_exceptions(project, changed_files)
+
+    def _check_documented_exceptions(self, project: Project, changed_files: Iterable) -> None:
+        """Flag non-Apache-2.0 files that are not documented as an exception.
+
+        Zephyr is Apache-2.0 as a whole; per the project charter CC-BY-4.0 is
+        allowed for documentation only. Any other license, or CC-BY-4.0 on a
+        non-documentation file, must be listed on the
+        :ref:`licensing page <zephyr_licensing>`. That page is generated from
+        the ``[[annotations]]`` blocks in ``REUSE.toml`` that carry a
+        ``Zephyr-Description`` key, so such a file is considered documented if and
+        only if it is matched by one of those blocks. The detection itself lives
+        in ``scripts/list_undocumented_licenses.py`` and is shared with that
+        tool and the docs licensing page.
+        """
+        for file, licenses in undocumented(project, changed_files):
+            self.fmtd_failure(
+                "error",
+                "Undocumented license",
+                file,
+                line=1,
+                desc=(
+                    f"File is licensed as {', '.join(sorted(licenses))}, which is not "
+                    "Apache-2.0. Importing code under another license has prerequisites; make "
+                    "sure the steps in "
+                    "https://docs.zephyrproject.org/latest/contribute/guidelines.html"
+                    "#components-using-other-licenses have been followed. Then document the "
+                    "component as an [[annotations]] entry with a 'Zephyr-Description' key in "
+                    "REUSE.toml, so it is listed on the licensing page "
+                    "(https://docs.zephyrproject.org/latest/LICENSING.html)."
+                ),
+            )
+
 
 class GitLint(ComplianceTest):
     """
@@ -1987,103 +2147,40 @@ def filter_py(root, fnames):
     ]
 
 
-class CMakeStyle(ComplianceTest):
+class CMakeStyle(StyleCheckMixin, ComplianceTest):
     """
-    Checks cmake style added/modified files
+    Checks the CMake style of added/modified files against the Zephyr CMake style
+    guidelines, using scripts/cmake/cmake_style.py. Only issues on lines touched
+    by the change are reported, so pre-existing style is not flagged.
+
+    Downstream projects can extend the mixed-case command allow-list by pointing
+    the CMAKE_STYLE_MIXED_CASE_FILE environment variable at an extra allow-list
+    file (same format as scripts/cmake/cmake_style_mixed_case.txt).
     """
 
     name = "CMakeStyle"
     doc = zephyr_doc_detail_builder("/contribute/style/cmake.html")
 
     def run(self):
-        # Loop through added/modified files
-        for fname in get_files(filter="d"):
-            if fname.endswith(".cmake") or fname.endswith("CMakeLists.txt"):
-                self.check_style(fname)
+        from importlib.util import find_spec
 
-    def check_style(self, fname):
-        SPACE_BEFORE_OPEN_BRACKETS_CHECK = re.compile(r"^\s*if\s+\(")
-        TAB_INDENTATION_CHECK = re.compile(r"^\t+")
+        if any(find_spec(m) is None for m in ("tree_sitter", "tree_sitter_cmake")):
+            self.skip(
+                "cmake_style requires tree-sitter; install it with "
+                "'pip install tree-sitter tree-sitter-cmake'"
+            )
 
-        with open(fname, encoding="utf-8") as f:
-            for line_num, line in enumerate(f.readlines(), start=1):
-                if TAB_INDENTATION_CHECK.match(line):
-                    self.fmtd_failure(
-                        "error",
-                        "CMakeStyle",
-                        fname,
-                        line_num,
-                        "Use spaces instead of tabs for indentation",
-                    )
+        # Load extensions to the mixed-case command allow-list
+        extra_args = []
+        if path := os.environ.get("CMAKE_STYLE_MIXED_CASE_FILE", None):
+            logging.info(f"Loading extra mixed-case commands from {path}")
+            extra_args += ["--mixed-case-file", path]
 
-                if SPACE_BEFORE_OPEN_BRACKETS_CHECK.match(line):
-                    self.fmtd_failure(
-                        "error",
-                        "CMakeStyle",
-                        fname,
-                        line_num,
-                        "Remove space before '(' in if() statements",
-                    )
-
-
-class Identity(ComplianceTest):
-    """
-    Checks if Emails of author and signed-off messages are consistent.
-    """
-
-    name = "Identity"
-    doc = zephyr_doc_detail_builder("/contribute/guidelines.html#commit-guidelines")
-
-    def run(self):
-        for shaidx in get_shas(COMMIT_RANGE):
-            commit_info = git('show', '-s', '--format=%an%n%ae%n%b', shaidx).split('\n', 2)
-
-            failures = []
-
-            if len(commit_info) == 2:
-                failures.append(f'{shaidx}: Empty commit message body')
-                auth_name, auth_email = commit_info
-                body = ''
-            elif len(commit_info) == 3:
-                auth_name, auth_email, body = commit_info
-            else:
-                self.failure(f'Unable to parse commit message for {shaidx}')
-                continue
-
-            if auth_email.endswith("@users.noreply.github.com"):
-                failures.append(
-                    f"{shaidx}: author email ({auth_email}) must "
-                    "be a real email and cannot end in "
-                    "@users.noreply.github.com"
-                )
-
-            # Returns an array of everything to the right of ':' on each signoff line
-            signoff_lines = re.findall(r"signed-off-by:\s(.*)", body, re.IGNORECASE)
-            if len(signoff_lines) == 0:
-                failures.append(f'{shaidx}: Missing signed-off-by line')
-            else:
-                # Validate all signoff lines' syntax while also searching for commit author
-                found_author_signoff = False
-                for signoff in signoff_lines:
-                    match = re.search(r"(.+) <(.+)>", signoff)
-
-                    if not match:
-                        failures.append(
-                            f"{shaidx}: Signed-off-by line ({signoff}) "
-                            "does not follow the syntax: First "
-                            "Last <email>."
-                        )
-                    elif (auth_name, auth_email) == match.groups():
-                        found_author_signoff = True
-
-                if not found_author_signoff:
-                    failures.append(
-                        f"{shaidx}: author name ({auth_name}) and email ({auth_email}) "
-                        "needs to match one of the signed-off-by entries."
-                    )
-
-            if failures:
-                self.failure('\n'.join(failures))
+        self._check_files(
+            ZEPHYR_BASE / "scripts" / "cmake" / "cmake_style.py",
+            lambda file: file.endswith(".cmake") or Path(file).name == "CMakeLists.txt",
+            extra_args=extra_args,
+        )
 
 
 class BinaryFiles(ComplianceTest):
@@ -2105,6 +2202,29 @@ class BinaryFiles(ComplianceTest):
                 if fname.startswith(BINARY_ALLOW_PATHS) and fname.endswith(BINARY_ALLOW_EXT):
                     continue
                 self.failure(f"Binary file not allowed: {fname}")
+
+
+class TestMetadataFilename(ComplianceTest):
+    """
+    Check that no newly added sample or test metadata file uses the legacy
+    'sample.yaml' or 'testcase.yaml' name instead of 'tests.yaml'.
+    """
+
+    name = "TestMetadataFilename"
+    doc = "Sample and test metadata must be stored in a file named tests.yaml."
+
+    def run(self):
+        LEGACY_NAMES = ("sample.yaml", "testcase.yaml")
+
+        for file in get_files(filter="A"):
+            name = os.path.basename(file)
+            if name in LEGACY_NAMES:
+                self.failure(
+                    f"New file '{file}' uses the legacy metadata filename "
+                    f"'{name}'. Sample and test metadata must be stored in a "
+                    f"file named 'tests.yaml'. Rename it to "
+                    f"'{os.path.join(os.path.dirname(file), 'tests.yaml')}'."
+                )
 
 
 class ImageSize(ComplianceTest):
@@ -2305,8 +2425,8 @@ class KeepSorted(ComplianceTest):
     MARKER = "zephyr-keep-sorted"
 
     def block_check_sorted(self, block_data, *, regex, strip, fold, icase):
-        def _test_indent(txt: str):
-            return txt.startswith((" ", "\t"))
+        def _is_continuation(txt: str):
+            return txt.startswith((" ", "\t")) or txt.rstrip() == ")"
 
         if regex is None:
             block_data = textwrap.dedent(block_data)
@@ -2327,12 +2447,12 @@ class KeepSorted(ComplianceTest):
                 if not re.match(regex, line):
                     continue
             else:
-                if _test_indent(line):
+                if _is_continuation(line):
                     continue
 
                 if fold:
                     # Fold back indented lines after the current one
-                    for cont in takewhile(_test_indent, lines[idx + 1 :]):
+                    for cont in takewhile(_is_continuation, lines[idx + 1 :]):
                         line += cont.strip()
 
             if icase:
@@ -2891,6 +3011,154 @@ def resolve_path_hint(hint):
         return hint
 
 
+def _run_test(testcase):
+    # Runs a single compliance test. Returns the test instance, whose 'case'
+    # and 'fmtd_failures' attributes hold the results.
+    test = testcase()
+    try:
+        test.run()
+    except EndTest:
+        pass
+    except KeyboardInterrupt:
+        # Let Ctrl-C (SIGINT) abort the whole run instead of being turned into
+        # a failure for the current check.
+        raise
+    except BaseException:
+        test.failure(f"An exception occurred in {test.name}:\n{traceback.format_exc()}")
+    return test
+
+
+def _run_tests_sequential(testcases):
+    # Runs 'testcases' one after the other. Returns a list of
+    # (testcase, case, fmtd_failures) tuples.
+    results = []
+    for testcase in testcases:
+        print(f"Running {testcase.name:30} tests in {resolve_path_hint(testcase.path_hint)} ...")
+        test = _run_test(testcase)
+        results.append((testcase, test.case, test.fmtd_failures))
+    return results
+
+
+def _init_worker(git_top, commit_range, loglevel):
+    # Recreates the global state set up by _main(): 'spawn' and 'forkserver'
+    # workers do not inherit it, and with 'fork' the inherited logging handler
+    # must be dropped so that init_logs() does not duplicate log output.
+    global GIT_TOP, COMMIT_RANGE
+    GIT_TOP = git_top
+    COMMIT_RANGE = commit_range
+
+    # Ctrl-C is dealt with by the parent process, which terminates the pool.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    root_logger = logging.getLogger('')
+    # Iterate over a copy: removeHandler() mutates root_logger.handlers.
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    init_logs(loglevel)
+
+
+def _run_test_in_worker(name):
+    # Runs the compliance test named 'name', capturing its stdout/stderr so
+    # that concurrently running checks do not interleave their output. The
+    # results are returned in picklable form: junitparser's TestCase wraps an
+    # XML element, so it crosses the process boundary as XML.
+    testcase = next(tc for tc in inheritors(ComplianceTest) if tc.name == name)
+
+    # Redirect the file descriptors themselves, not just sys.stdout/sys.stderr,
+    # so that output written directly to them by child processes is captured.
+    with tempfile.TemporaryFile(mode='w+', encoding='utf-8', errors='backslashreplace') as capture:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        stdout_fd = os.dup(1)
+        stderr_fd = os.dup(2)
+        os.dup2(capture.fileno(), 1)
+        os.dup2(capture.fileno(), 2)
+        try:
+            test = _run_test(testcase)
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(stdout_fd, 1)
+            os.dup2(stderr_fd, 2)
+            os.close(stdout_fd)
+            os.close(stderr_fd)
+        capture.seek(0)
+        output = capture.read()
+
+    return {
+        'name': name,
+        'case_xml': test.case.tostring(),
+        'fmtd_failures': [
+            {
+                'severity': f.severity,
+                'title': f.title,
+                'file': f.file,
+                'line': f.line,
+                'col': f.col,
+                'desc': f.desc,
+                'end_line': f.end_line,
+                'end_col': f.end_col,
+            }
+            for f in test.fmtd_failures
+        ],
+        'output': output,
+    }
+
+
+def _run_tests_parallel(testcases, jobs, loglevel):
+    # Runs 'testcases' in a pool of 'jobs' worker processes (one per CPU if
+    # 'jobs' is 0). Returns the same tuples as _run_tests_sequential().
+    jobs = jobs or os.cpu_count() or 1
+    jobs = min(jobs, len(testcases)) or 1
+    if jobs == 1:
+        return _run_tests_sequential(testcases)
+
+    # Start the slowest checks first so that they are not left running alone at
+    # the end. The Kconfig-based checks each parse a full Kconfig tree.
+    testcases = sorted(testcases, key=lambda tc: (not issubclass(tc, KconfigCheck), tc.name))
+    by_name = {tc.name: tc for tc in testcases}
+
+    print(f"Running {len(testcases)} checks using {jobs} parallel workers")
+
+    # Ignore SIGINT while the workers are being started, so that they inherit
+    # SIG_IGN with the 'fork' start method too and Ctrl-C is left for this
+    # process to act on.
+    sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        pool = multiprocessing.Pool(
+            processes=jobs,
+            initializer=_init_worker,
+            initargs=(GIT_TOP, COMMIT_RANGE, loglevel),
+        )
+    finally:
+        signal.signal(signal.SIGINT, sigint)
+
+    results = {}
+    try:
+        for res in pool.imap_unordered(_run_test_in_worker, [tc.name for tc in testcases]):
+            testcase = by_name[res['name']]
+            print(f"Completed {testcase.name:30} tests in {resolve_path_hint(testcase.path_hint)}")
+
+            if res['output']:
+                print(res['output'], end='' if res['output'].endswith('\n') else '\n')
+
+            case = TestCase.fromstring(res['case_xml'])
+            fmtd_failures = [FmtdFailure(**f) for f in res['fmtd_failures']]
+            results[testcase.name] = (testcase, case, fmtd_failures)
+        pool.close()
+    except BaseException:
+        # On Ctrl-C (or any other error), kill the workers straight away
+        # instead of waiting for the checks that are still running.
+        pool.terminate()
+        raise
+    finally:
+        pool.join()
+
+    # Return results in submission order, so that annotations and the JUnit
+    # output are deterministic.
+    return [results[tc.name] for tc in testcases]
+
+
 def parse_args(argv):
     default_range = 'HEAD~1..HEAD'
     # Git root empty tree sha1 (represents a tree with no files)
@@ -2913,7 +3181,7 @@ def parse_args(argv):
         const=f'{empty_tree}..HEAD',
         help="""The full history commit range. Useful for testing purposes.
                 WARNING: Should not be set for checks that perform per-commit actions, such as
-                GitDiffCheck/GitLint/Identity.""",
+                GitDiffCheck/GitLint.""",
     )
     parser.add_argument(
         '-o',
@@ -2959,8 +3227,25 @@ def parse_args(argv):
     parser.add_argument(
         '--annotate', action="store_true", help="Print GitHub Actions-compatible annotations."
     )
+    parser.add_argument(
+        '-p',
+        '--parallel',
+        nargs='?',
+        type=int,
+        const=0,
+        default=0,
+        metavar='N',
+        help='''Run the checks in parallel, using N worker processes (one per
+                CPU if N is 0 or omitted, which is the default). Pass 1 to run
+                the checks sequentially.''',
+    )
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    if args.parallel < 0:
+        parser.error("argument -p/--parallel: N must be >= 0")
+
+    return args
 
 
 def _main(args):
@@ -3006,6 +3291,7 @@ def _main(args):
     included = list(map(lambda x: x.lower(), args.module))
     excluded = list(map(lambda x: x.lower(), args.exclude_module))
 
+    testcases = []
     for testcase in inheritors(ComplianceTest):
         # "Modules" and "testcases" are the same thing. Better flags would have
         # been --tests and --exclude-tests or the like, but it's awkward to
@@ -3018,21 +3304,20 @@ def _main(args):
             print("Skipping " + testcase.name)
             continue
 
-        test = testcase()
-        try:
-            print(f"Running {test.name:30} tests in {resolve_path_hint(test.path_hint)} ...")
-            test.run()
-        except EndTest:
-            pass
-        except BaseException:
-            test.failure(f"An exception occurred in {test.name}:\n{traceback.format_exc()}")
+        testcases.append(testcase)
 
+    if args.parallel == 1:
+        results = _run_tests_sequential(testcases)
+    else:
+        results = _run_tests_parallel(testcases, args.parallel, args.loglevel)
+
+    for testcase, case, fmtd_failures in results:
         # Annotate if required
         if args.annotate:
-            for res in test.fmtd_failures:
-                annotate(res, test.doc)
+            for res in fmtd_failures:
+                annotate(res, testcase.doc)
 
-        suite.add_testcase(test.case)
+        suite.add_testcase(case)
 
     if args.output:
         xml = JUnitXml()
@@ -3093,6 +3378,9 @@ def main(argv=None):
 
     try:
         n_fails = _main(args)
+    except KeyboardInterrupt:
+        # Abort cleanly on Ctrl-C rather than dumping a traceback.
+        sys.exit("Interrupted")
     except BaseException:
         # Catch BaseException instead of Exception to include stuff like
         # SystemExit (raised by sys.exit())

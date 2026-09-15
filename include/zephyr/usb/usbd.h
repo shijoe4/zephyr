@@ -101,24 +101,30 @@ struct usbd_str_desc_data {
  * Example callback code fragment:
  *
  * @code{.c}
- * static int foo_to_host_cb(const struct usbd_context *const ctx,
- *                           const struct usb_setup_packet *const setup,
- *                           struct net_buf *const buf)
+ * static struct net_buf *foo_to_host_cb(const struct usbd_context *const ctx,
+ *                                       const struct usb_setup_packet *const setup)
  * {
  *     if (setup->wIndex == WEBUSB_REQ_GET_URL) {
+ *         struct net_buf *buf;
+ *         uint16_t len;
  *         uint8_t index = USB_GET_DESCRIPTOR_INDEX(setup->wValue);
  *
  *         if (index != SAMPLE_WEBUSB_LANDING_PAGE) {
- *             return -ENOTSUP;
+ *             return NULL;
  *         }
  *
- *         net_buf_add_mem(buf, &webusb_origin_url,
- *                         MIN(net_buf_tailroom(buf), sizeof(webusb_origin_url)));
+ *         len = MIN(setup->wLength, sizeof(webusb_origin_url));
+ *         buf = usbd_ep_ctrl_data_in_alloc(ctx, len);
+ *         if (buf == NULL) {
+ *             return NULL;
+ *         }
  *
- *         return 0;
+ *         net_buf_add_mem(buf, &webusb_origin_url, len);
+ *
+ *         return buf;
  *     }
  *
- *     return -ENOTSUP;
+ *     return NULL;
  * }
  * @endcode
  */
@@ -128,9 +134,8 @@ struct usbd_vreq_node {
 	/** Vendor code (bRequest value) */
 	const uint8_t code;
 	/** Vendor request callback for device-to-host direction */
-	int (*to_host)(const struct usbd_context *const ctx,
-		       const struct usb_setup_packet *const setup,
-		       struct net_buf *const buf);
+	struct net_buf *(*to_host)(const struct usbd_context *const ctx,
+				   const struct usb_setup_packet *const setup);
 	/**
 	 * Vendor request callback for host-to-device direction
 	 *
@@ -352,9 +357,8 @@ struct usbd_class_api {
 			      const struct net_buf *const buf);
 
 	/** USB control request handler to host */
-	int (*control_to_host)(struct usbd_class_data *const c_data,
-			       const struct usb_setup_packet *const setup,
-			       struct net_buf *const buf);
+	struct net_buf *(*control_to_host)(struct usbd_class_data *const c_data,
+					   const struct usb_setup_packet *const setup);
 
 	/** Endpoint request completion event handler */
 	int (*request)(struct usbd_class_data *const c_data,
@@ -382,8 +386,8 @@ struct usbd_class_api {
 	void (*shutdown)(struct usbd_class_data *const c_data);
 
 	/** Get function descriptor based on speed parameter */
-	void *(*get_desc)(struct usbd_class_data *const c_data,
-			  const enum usbd_speed speed);
+	const void *(*get_desc)(struct usbd_class_data *const c_data,
+				const enum usbd_speed speed);
 };
 
 /**
@@ -520,6 +524,7 @@ static inline void *usbd_class_get_private(const struct usbd_class_data *const c
 	))								\
 	static STRUCT_SECTION_ITERABLE(usbd_context, device_name) = {	\
 		.name = STRINGIFY(device_name),				\
+		.mutex = Z_MUTEX_INITIALIZER(device_name.mutex),	\
 		.dev = udc_dev,						\
 		.fs_desc = &fs_desc_##device_name,			\
 		IF_ENABLED(USBD_SUPPORTS_HIGH_SPEED, (			\
@@ -795,8 +800,8 @@ static inline void *usbd_class_get_private(const struct usbd_class_data *const c
  *  @param _reqs Variable number of vendor requests
  */
 #define USBD_VENDOR_REQ(_reqs...) \
-	VENDOR_REQ_DEFINE(((uint8_t []) { _reqs }), \
-			  sizeof((uint8_t []) { _reqs }))
+	VENDOR_REQ_DEFINE(((const uint8_t []) { _reqs }), \
+			  sizeof((const uint8_t []) { _reqs }))
 
 
 /**
@@ -1105,12 +1110,14 @@ int usbd_ep_buf_free(struct usbd_context *uds_ctx, struct net_buf *buf);
  *
  * @param[in] uds_ctx Pointer to USB device support context
  *
- * @return true if endpoint is halted, false otherwise
+ * @return true if the device is suspended, false otherwise
  */
 bool usbd_is_suspended(struct usbd_context *uds_ctx);
 
 /**
  * @brief Initiate the USB remote wakeup (TBD)
+ *
+ * @param[in] uds_ctx Pointer to USB device support context
  *
  * @return 0 on success, other values on fail.
  */

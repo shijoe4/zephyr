@@ -65,7 +65,7 @@ static void tad214x_convert_encoder(struct sensor_value *val, uint16_t raw_val)
 
 static void tad214x_convert_angle(struct sensor_value *val, uint16_t raw_val)
 {
-	raw_val = (raw_val*36000/65635+18000) % 36000;
+	raw_val = ((uint32_t)raw_val*36000/65535+18000) % 36000;
 	val->val1 = raw_val / 100;
 	val->val2 = (raw_val % 100) * 1000;
 }
@@ -337,7 +337,7 @@ static DEVICE_API(sensor, tad214x_api_funcs) = {
 		.if_mode = IF_SPI, \
 		.bus.spi = SPI_DT_SPEC_INST_GET(inst, \
 						SPI_WORD_SET(8) | \
-						SPI_TRANSFER_MSB, 0), \
+						SPI_TRANSFER_MSB), \
 		.bus_io = &tad214x_bus_io_spi, \
 		TAD214X_CONFIG(inst) \
 	}

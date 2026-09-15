@@ -301,7 +301,6 @@ zephyr_udc0: &usbotg_hs {
 };
 
 &otghs_phy {
-	clock-reference = "SYSCFG_OTG_HS_PHY_CLK_16MHz";
 	status = "okay";
 };
 
@@ -399,5 +398,13 @@ zephyr_udc0: &usbotg_hs {
 };
 
 &vbat4 {
+	status = "okay";
+};
+
+zephyr_jpegenc: &jpeg {
+	status = "okay";
+};
+
+&gpu2d {
 	status = "okay";
 };

@@ -264,17 +264,14 @@ static int max30101_init(const struct device *dev)
 	return 0;
 }
 
-#define MAX30101_CHECK(n)                                                                          \
-	BUILD_ASSERT(DT_INST_PROP_LEN(n, led_pa) == 3,                                             \
-		     "MAX30101 led-pa property must have exactly 3 elements");                     \
-	BUILD_ASSERT(DT_INST_PROP_LEN(n, led_slot) == 4,                                           \
-		     "MAX30101 led-slot property must have exactly 4 elements")
-
-#define MAX30102_CHECK(n)                                                                          \
-	BUILD_ASSERT(DT_INST_PROP_LEN(n, led_pa) == 2,                                            \
-		     "MAX30102 led-pa property must have exactly 2 elements");                     \
-	BUILD_ASSERT(DT_INST_PROP_LEN(n, led_slot) == 4,                                           \
-		     "MAX30102 led-slot property must have exactly 4 elements")
+#define MAX3010X_SLOTS_CHECK(n)                                                                    \
+	BUILD_ASSERT(DT_INST_PROP_BY_IDX(n, led_slot, 0) != 0,                                     \
+		     "MAX3010x led-slot property cannot begin with a 0.");                         \
+	BUILD_ASSERT(!((DT_INST_PROP_BY_IDX(n, led_slot, 1) == 0 &&                                \
+			DT_INST_PROP_BY_IDX(n, led_slot, 2) != 0) ||                               \
+		       (DT_INST_PROP_BY_IDX(n, led_slot, 2) == 0 &&                                \
+			DT_INST_PROP_BY_IDX(n, led_slot, 3) != 0)),                                \
+		     "MAX3010x led-slot sequence invalid, there cannot be 0 between numbers.")
 
 #define MAX30101_SLOT_CFG(n)                                                                       \
 	COND_CODE_1(DT_INST_ENUM_HAS_VALUE(n, acq_mode, heart_rate), \
@@ -295,6 +292,7 @@ static int max30101_init(const struct device *dev)
 	}
 
 #define MAX3010X_INIT(n, chip, _is_max30102)                                                       \
+	IF_ENABLED(DT_INST_ENUM_HAS_VALUE(n, acq_mode, multi_led), (MAX3010X_SLOTS_CHECK(n)));     \
 	static const struct max30101_config chip##_config_##n = {                                  \
 		.i2c = I2C_DT_SPEC_INST_GET(n),                                                    \
 		.fifo = (DT_INST_ENUM_IDX(n, smp_ave) << MAX30101_FIFO_CFG_SMP_AVE_SHIFT) |        \
@@ -323,7 +321,6 @@ static int max30101_init(const struct device *dev)
 				     CONFIG_SENSOR_INIT_PRIORITY, &max30101_driver_api);
 
 #define MAX30101_INIT(n)                                                                           \
-	MAX30101_CHECK(n);                                                                         \
 	MAX3010X_INIT(n, max30101, 0)
 
 DT_INST_FOREACH_STATUS_OKAY(MAX30101_INIT)
@@ -335,7 +332,6 @@ DT_INST_FOREACH_STATUS_OKAY(MAX30101_INIT)
 #define DT_DRV_COMPAT maxim_max30102
 
 #define MAX30102_INIT(n)                                                                           \
-	MAX30102_CHECK(n);                                                                         \
 	MAX3010X_INIT(n, max30102, 1)
 
 DT_INST_FOREACH_STATUS_OKAY(MAX30102_INIT)

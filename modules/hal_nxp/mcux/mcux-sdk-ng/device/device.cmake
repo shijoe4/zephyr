@@ -78,6 +78,26 @@ if(CONFIG_ARM)
   set(CONFIG_MCUX_COMPONENT_driver.dsp ON)
 endif()
 
+# i.MX943 device headers unconditionally include "fsl_elec_spec.h", which lives
+# in the device drivers/ folder. That folder is only added to the include path
+# when a drivers/ component is selected; Cortex-A cores do not pull in
+# driver.reset (see above), so enable elec_spec for the whole device to keep
+# the include path valid on every core.
+if(CONFIG_SOC_MIMX94398)
+  set(CONFIG_MCUX_COMPONENT_driver.elec_spec ON)
+endif()
+
+# Same story on i.MX952: fsl_common_arm.h unconditionally includes
+# "fsl_clock.h" from the device drivers/ folder, and on the Cortex-A55 the
+# clocks are driven over SCMI so driver.clock is not selected above. Enable the
+# header-only memory component, which is what puts that folder on the include
+# path, for the whole device. driver.clock itself cannot be used here: its
+# fsl_clock.c talks to the system manager directly and is not built for SCMI
+# configurations.
+if(CONFIG_SOC_MIMX9529)
+  set(CONFIG_MCUX_COMPONENT_driver.memory ON)
+endif()
+
 # load device variables
 include(${mcux_device_folder}/variable.cmake)
 

@@ -173,7 +173,6 @@ static DEVICE_API(can, can_sam_driver_api) = {
 #endif /* CONFIG_CAN_MANUAL_RECOVERY_MODE */
 	.get_core_clock = can_sam_get_core_clock,
 	.get_max_filters = can_mcan_get_max_filters,
-	.set_state_change_callback =  can_mcan_set_state_change_callback,
 	.timing_min = CAN_MCAN_TIMING_MIN_INITIALIZER,
 	.timing_max = CAN_MCAN_TIMING_MAX_INITIALIZER,
 #ifdef CONFIG_CAN_FD_MODE
@@ -247,9 +246,7 @@ static void config_can_##inst##_irq(void)                                       
 					    &can_sam_ops,		\
 					    &can_sam_cbs_##inst);
 
-#define CAN_SAM_DATA_INST(inst)						\
-	static struct can_mcan_data can_mcan_data_##inst =		\
-		CAN_MCAN_DATA_INITIALIZER(NULL);
+#define CAN_SAM_DATA_INST(inst) CAN_MCAN_DATA_DEFINE(can_mcan_data_##inst, NULL);
 
 #define CAN_SAM_DEVICE_INST(inst)						\
 	CAN_DEVICE_DT_INST_DEFINE(inst, can_sam_init, NULL,			\

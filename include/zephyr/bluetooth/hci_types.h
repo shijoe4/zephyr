@@ -1756,6 +1756,11 @@ struct bt_hci_cp_le_set_adv_set_random_addr {
 #define BT_HCI_LE_ADV_SCAN_REQ_ENABLE  1
 #define BT_HCI_LE_ADV_SCAN_REQ_DISABLE 0
 
+/** Minimum advertising TX power in dBm (Core Spec Vol 4, Part E, 7.8.53). */
+#define BT_HCI_LE_ADV_TX_POWER_MIN     -127
+/** Maximum advertising TX power in dBm (Core Spec Vol 4, Part E, 7.8.53). */
+#define BT_HCI_LE_ADV_TX_POWER_MAX      20
+/** Advertising TX power: no preference, let the controller choose. */
 #define BT_HCI_LE_ADV_TX_POWER_NO_PREF 0x7F
 
 #define BT_HCI_LE_ADV_HANDLE_MAX       0xEF
@@ -4674,6 +4679,7 @@ struct bt_hci_evt_le_conn_rate_change {
 #define BT_HCI_ERR_LINK_KEY_CANNOT_BE_CHANGED   0x26
 #define BT_HCI_ERR_REQUESTED_QOS_NOT_SUPPORTED  0x27
 #define BT_HCI_ERR_INSTANT_PASSED               0x28
+/** Pairing with Unit Key Not Supported. This error is only valid for BR/EDR. */
 #define BT_HCI_ERR_PAIRING_NOT_SUPPORTED        0x29
 #define BT_HCI_ERR_DIFF_TRANS_COLLISION         0x2a
 #define BT_HCI_ERR_QOS_UNACCEPTABLE_PARAM       0x2c

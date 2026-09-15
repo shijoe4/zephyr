@@ -18,7 +18,7 @@
 
 #include "testlib/att_read.h"
 
-#include <argparse.h>		/* For get_device_nbr() */
+#include <bsim_args_runner.h>		/* For get_device_nbr() */
 #include "babblekit/testcase.h"
 #include "babblekit/flags.h"
 
@@ -386,7 +386,7 @@ static void entrypoint_peer(void)
 
 		LOG_INF("disconnect");
 		err = disconnect(conn);
-		TEST_ASSERT(!err, "Failed to initate disconnect (err %d)", err);
+		TEST_ASSERT(!err, "Failed to initiate disconnect (err %d)", err);
 		bt_conn_drop(&conn);
 	}
 }

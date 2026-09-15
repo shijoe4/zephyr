@@ -22,7 +22,16 @@
 
 #ifdef CONFIG_CUSTOM_STACK_GUARD
 void z_riscv_custom_stack_guard_init(void);
+
+/*
+ * Enable the custom stack guard for the given thread's stack.
+ *
+ * @thread may be NULL when CONFIG_MULTITHREADING is disabled, since no
+ * thread object exists for the main thread in that mode; implementations
+ * must handle NULL and guard the main stack instead.
+ */
 void z_riscv_custom_stack_guard_enable(struct k_thread *thread);
+
 void z_riscv_custom_stack_guard_disable(void);
 bool z_riscv_custom_stack_guard_is_fault(struct arch_esf *esf);
 #endif /* CONFIG_CUSTOM_STACK_GUARD */
@@ -51,7 +60,7 @@ static ALWAYS_INLINE void arch_kernel_init(void)
 #endif
 #if ((CONFIG_MP_MAX_NUM_CPUS) > 1)
 	unsigned int cpu_node_list[] = {
-		DT_FOREACH_CHILD_STATUS_OKAY_SEP(DT_PATH(cpus), DT_REG_ADDR, (,))
+		DT_FOREACH_CPU_STATUS_OKAY_SEP(DT_REG_ADDR, (,))
 	};
 	unsigned int cpu_num, hart_x;
 
@@ -114,6 +123,7 @@ int z_irq_do_offload(void);
 #ifdef CONFIG_FPU_SHARING
 void arch_flush_local_fpu(void);
 void arch_flush_fpu_ipi(unsigned int cpu);
+void z_riscv_fpu_flush_thread(struct k_thread *thread);
 #endif
 
 #ifndef CONFIG_MULTITHREADING

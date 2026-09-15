@@ -89,6 +89,10 @@ struct fragmented_advertiser {
 
 static struct fragmented_advertiser reassembling_advertiser;
 
+/* The timeout handler runs on the Bluetooth workqueue and is thereby
+ * serialized with the extended advertising report processing, which also
+ * accesses reassembling_advertiser without locking.
+ */
 static void reassembly_timeout_work_handler(struct k_work *work)
 {
 	if (reassembling_advertiser.state == FRAG_ADV_REASSEMBLING) {
@@ -105,7 +109,7 @@ K_WORK_DELAYABLE_DEFINE(reassembly_timeout_work, reassembly_timeout_work_handler
 
 static void reassembly_timeout_work_reschedule(void)
 {
-	int err = k_work_reschedule(&reassembly_timeout_work, REASSEMBLY_TIMEOUT);
+	int err = bt_work_reschedule(&reassembly_timeout_work, REASSEMBLY_TIMEOUT);
 
 	if (err < 0) {
 		LOG_ERR("Failed to reschedule reassembly timeout work: %d", err);
@@ -141,7 +145,6 @@ static void reset_reassembling_advertiser(void)
 }
 
 #if defined(CONFIG_BT_PER_ADV_SYNC)
-static struct bt_le_per_adv_sync *get_pending_per_adv_sync(void);
 static struct bt_le_per_adv_sync per_adv_sync_pool[CONFIG_BT_PER_ADV_SYNC_MAX];
 static sys_slist_t pa_sync_cbs = SYS_SLIST_STATIC_INIT(&pa_sync_cbs);
 #endif /* defined(CONFIG_BT_PER_ADV_SYNC) */
@@ -1141,6 +1144,16 @@ static void bt_hci_le_per_adv_report_common(struct net_buf *buf)
 
 	if (!per_adv_sync->report_truncated) {
 #if CONFIG_BT_PER_ADV_SYNC_BUF_SIZE > 0
+		if (evt->length > buf->len) {
+			/* The event does not carry the data it claims. Drop the report */
+			LOG_WRN("Periodic adv report corrupted (wants %u out of %u)", evt->length,
+				buf->len);
+
+			per_adv_sync->report_truncated = true;
+			net_buf_simple_reset(&per_adv_sync->reassembly);
+			return;
+		}
+
 		if (net_buf_simple_tailroom(&per_adv_sync->reassembly) < evt->length) {
 			/* The buffer is too small for the entire report. Drop it */
 			LOG_WRN("Buffer is too small to reassemble the report. "
@@ -1257,6 +1270,7 @@ static void bt_hci_le_per_adv_sync_established_common(struct net_buf *buf)
 	struct bt_le_per_adv_sync_synced_info sync_info;
 	struct bt_le_per_adv_sync *pending_per_adv_sync;
 	struct bt_le_per_adv_sync_cb *listener, *tmp;
+	bt_addr_le_t pending_id_addr;
 	bt_addr_le_t id_addr;
 	bool unexpected_evt;
 	int err;
@@ -1289,10 +1303,22 @@ static void bt_hci_le_per_adv_sync_established_common(struct net_buf *buf)
 		bt_addr_le_copy(&id_addr, bt_lookup_id_addr(BT_ID_DEFAULT, &evt->adv_addr));
 	}
 
+	if (pending_per_adv_sync != NULL) {
+		bt_addr_le_t *addr_to_check = &pending_per_adv_sync->addr;
+
+		if (bt_addr_le_is_resolved(addr_to_check)) {
+			bt_addr_le_copy_resolved(&pending_id_addr, addr_to_check);
+		} else {
+			bt_addr_le_copy(
+				&pending_id_addr,
+				bt_lookup_id_addr(BT_ID_DEFAULT, addr_to_check));
+		}
+	}
+
 	if (!pending_per_adv_sync ||
 	    (!atomic_test_bit(pending_per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCING_USE_LIST) &&
 	     ((pending_per_adv_sync->sid != evt->sid) ||
-	      !bt_addr_le_eq(&pending_per_adv_sync->addr, &id_addr)))) {
+	      !bt_addr_le_eq(&pending_id_addr, &id_addr)))) {
 		LOG_ERR("Unexpected per adv sync established event");
 		/* Request terminate of pending periodic advertising in controller */
 		per_adv_sync_terminate(sys_le16_to_cpu(evt->handle));
@@ -1387,6 +1413,11 @@ int bt_le_per_adv_sync_subevent(struct bt_le_per_adv_sync *per_adv_sync,
 	struct bt_hci_cp_le_set_pawr_sync_subevent *cp;
 	struct net_buf *buf;
 
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
+
 	if (params->num_subevents > BT_HCI_PAWR_SUBEVENT_MAX) {
 		return -EINVAL;
 	}
@@ -1412,6 +1443,11 @@ int bt_le_per_adv_set_response_data(struct bt_le_per_adv_sync *per_adv_sync,
 {
 	struct bt_hci_cp_le_set_pawr_response_data *cp;
 	struct net_buf *buf;
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
 
 	if (per_adv_sync->num_subevents == 0) {
 		return -EINVAL;
@@ -1839,6 +1875,17 @@ int bt_le_scan_start(const struct bt_le_scan_param *param, bt_le_scan_cb_t cb)
 
 int bt_le_scan_stop(void)
 {
+	__maybe_unused int unlock_err;
+	int err;
+
+	/* Take the same lock as bt_le_scan_start(), so that the state it sets
+	 * up is not cleared while it is still being set up.
+	 */
+	err = k_mutex_lock(&scan_state.scan_explicit_params_mutex, K_NO_WAIT);
+	if (err != 0) {
+		return err;
+	}
+
 	bt_scan_softreset();
 	scan_dev_found_cb = NULL;
 
@@ -1851,7 +1898,12 @@ int bt_le_scan_stop(void)
 #endif
 	}
 
-	return bt_le_scan_user_remove(BT_LE_SCAN_USER_EXPLICIT_SCAN);
+	err = bt_le_scan_user_remove(BT_LE_SCAN_USER_EXPLICIT_SCAN);
+
+	unlock_err = k_mutex_unlock(&scan_state.scan_explicit_params_mutex);
+	__ASSERT_NO_MSG(unlock_err == 0);
+
+	return err;
 }
 
 int bt_le_scan_cb_register(struct bt_le_scan_cb *cb)
@@ -1890,7 +1942,18 @@ struct bt_le_per_adv_sync *bt_le_per_adv_sync_lookup_index(uint8_t index)
 int bt_le_per_adv_sync_get_info(struct bt_le_per_adv_sync *per_adv_sync,
 				struct bt_le_per_adv_sync_info *info)
 {
-	if (per_adv_sync == NULL || info == NULL) {
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
+
+	if (info == NULL) {
+		LOG_DBG("info is NULL");
+		return -EINVAL;
+	}
+
+	if (!atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_CREATED)) {
+		LOG_DBG("per_adv_sync %p is not created", per_adv_sync);
 		return -EINVAL;
 	}
 
@@ -2067,6 +2130,11 @@ static int bt_le_per_adv_sync_terminate(struct bt_le_per_adv_sync *per_adv_sync)
 {
 	int err;
 
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
+
 	if (!atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCED)) {
 		return -EINVAL;
 	}
@@ -2086,6 +2154,11 @@ int bt_le_per_adv_sync_delete(struct bt_le_per_adv_sync *per_adv_sync)
 
 	if (!BT_FEAT_LE_EXT_PER_ADV(bt_dev.le.features)) {
 		return -ENOTSUP;
+	}
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
 	}
 
 	if (atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCED)) {
@@ -2143,6 +2216,11 @@ static int bt_le_set_per_adv_recv_enable(struct bt_le_per_adv_sync *per_adv_sync
 
 	if (!BT_FEAT_LE_EXT_PER_ADV(bt_dev.le.features)) {
 		return -ENOTSUP;
+	}
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
 	}
 
 	if (!atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCED)) {
@@ -2206,6 +2284,11 @@ int bt_le_per_adv_sync_transfer(const struct bt_le_per_adv_sync *per_adv_sync,
 		return -ENOTSUP;
 	} else if (!BT_FEAT_LE_PAST_SEND(bt_dev.le.features)) {
 		return -ENOTSUP;
+	}
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
 	}
 
 	buf = bt_hci_cmd_alloc(K_FOREVER);

@@ -8,6 +8,7 @@
 #include <zephyr/kernel.h>
 #include <kernel_internal.h>
 #include <zephyr/arch/riscv/csr.h>
+#include <zephyr/llext/symbol.h>
 #include <pmp.h>
 
 #ifdef CONFIG_USERSPACE
@@ -15,6 +16,17 @@
  * Per-thread (TLS) variable indicating whether execution is in user mode.
  */
 Z_THREAD_LOCAL uint8_t is_user_mode;
+
+/*
+ * Exported accessor for the user-mode flag so loadable extensions (llext) -
+ * which cannot relocate a thread-local symbol - can resolve it and thus call
+ * syscalls. Mirrors the Arm z_arm_thread_is_in_user_mode().
+ */
+bool z_riscv_thread_is_user_mode(void)
+{
+	return is_user_mode != 0;
+}
+EXPORT_SYMBOL(z_riscv_thread_is_user_mode);
 #endif
 
 void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
@@ -275,12 +287,27 @@ FUNC_NORETURN void z_riscv_switch_to_main_no_multithreading(k_thread_entry_t mai
 
 	irq_unlock(RV_STATUS_IE);
 
+	/*
+	 * No thread object exists in no-multithreading mode, so pass NULL:
+	 * the callee's contract allows a NULL thread and expects the
+	 * implementation to guard the main stack in that case.
+	 */
+	register struct k_thread *a0 __asm__("a0") = NULL;
+
+	/*
+	 * Bind main_entry to a callee-saved register: the call below
+	 * clobbers the caller-saved registers, and jalr consumes %1 only
+	 * after the call returns. %0 is safe anywhere because mv sp
+	 * consumes it before the call.
+	 */
+	register k_thread_entry_t s1 __asm__("s1") = main_entry;
+
 	__asm__ volatile (
 	"mv sp, %0\n"
 	"call z_riscv_custom_stack_guard_enable\n"
 	"jalr ra, %1, 0\n"
 	:
-	: "r" (main_stack), "r" (main_entry)
+	: "r" (main_stack), "r" (s1), "r" (a0)
 	: "memory");
 #else
 	irq_unlock(RV_STATUS_IE);

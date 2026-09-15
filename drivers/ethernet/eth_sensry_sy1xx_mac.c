@@ -101,7 +101,6 @@ struct sy1xx_mac_dev_data {
 };
 
 /* prototypes */
-static int sy1xx_mac_set_mac_addr(const struct device *dev);
 static int sy1xx_mac_set_promiscuous_mode(const struct device *dev, bool promiscuous_mode);
 static int sy1xx_mac_set_config(const struct device *dev,
 				struct net_if *iface,
@@ -145,11 +144,7 @@ static int sy1xx_mac_set_promiscuous_mode(const struct device *dev, bool promisc
 
 	/* set promiscuous mode */
 	prom = sys_read32(cfg->ctrl_addr + SY1XX_MAC_ADDRESS_HIGH_REG);
-	if (promiscuous_mode) {
-		prom &= ~BIT(16);
-	} else {
-		prom |= BIT(16);
-	}
+	WRITE_BIT(prom, 16, promiscuous_mode);
 	sys_write32(prom, cfg->ctrl_addr + SY1XX_MAC_ADDRESS_HIGH_REG);
 
 	return 0;
@@ -159,7 +154,6 @@ static void sy1xx_mac_set_mac_addr(const struct device *dev)
 {
 	struct sy1xx_mac_dev_config *cfg = (struct sy1xx_mac_dev_config *)dev->config;
 	struct sy1xx_mac_dev_data *data = (struct sy1xx_mac_dev_data *)dev->data;
-	int ret;
 	uint32_t v_low, v_high;
 
 	LOG_INF("%s set link address %02x:%02x:%02x:%02x:%02x:%02x", dev->name, data->mac_addr[0],
@@ -171,7 +165,7 @@ static void sy1xx_mac_set_mac_addr(const struct device *dev)
 	sys_write32(v_low, cfg->ctrl_addr + SY1XX_MAC_ADDRESS_LOW_REG);
 
 	v_high = sys_read32(cfg->ctrl_addr + SY1XX_MAC_ADDRESS_HIGH_REG);
-	v_high |= (v_high & 0xffff0000) | sys_get_le16(&data->mac_addr[4]);
+	v_high = (v_high & 0xffff0000) | sys_get_le16(&data->mac_addr[4]);
 	sys_write32(v_high, cfg->ctrl_addr + SY1XX_MAC_ADDRESS_HIGH_REG);
 }
 
@@ -389,9 +383,7 @@ static int sy1xx_mac_low_level_send(const struct device *dev, uint8_t *tx, uint1
 	}
 
 	/* copy data to dma buffer */
-	for (uint32_t i = 0; i < len; i++) {
-		data->dma_buffers->tx[i] = tx[i];
-	}
+	memcpy(data->dma_buffers->tx, tx, len);
 
 	/* start dma transfer */
 	SY1XX_UDMA_START_TX(cfg->base_addr, (uint32_t)data->dma_buffers->tx, len, 0);
@@ -444,14 +436,12 @@ static int sy1xx_mac_send(const struct device *dev, struct net_pkt *pkt)
 	data->temp.tx_len = 0;
 	do {
 		/* copy fragment to buffer */
-		for (uint32_t i = 0; i < frag->len; i++) {
-			if (data->temp.tx_len < MAX_MAC_PACKET_LEN) {
-				data->temp.tx[data->temp.tx_len++] = frag->data[i];
-			} else {
-				LOG_ERR("tx buffer overflow");
-				return -ENOMEM;
-			}
+		if (data->temp.tx_len + frag->len > MAX_MAC_PACKET_LEN) {
+			LOG_ERR("tx buffer overflow");
+			return -ENOMEM;
 		}
+		memcpy(&data->temp.tx[data->temp.tx_len], frag->data, frag->len);
+		data->temp.tx_len += frag->len;
 
 		frag = frag->frags;
 	} while (frag);

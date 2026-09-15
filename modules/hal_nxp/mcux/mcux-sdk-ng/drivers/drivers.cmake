@@ -12,6 +12,7 @@ elseif(CONFIG_ARCH STREQUAL "arm")
   zephyr_library_sources(${MCUX_SDK_NG_DIR}/drivers/common/fsl_common_arm.c)
 endif()
 
+set_variable_ifdef(CONFIG_DSP_BACKEND_POWERQUAD    CONFIG_MCUX_COMPONENT_driver.powerquad)
 set_variable_ifdef(CONFIG_GPIO_MCUX_IGPIO       CONFIG_MCUX_COMPONENT_driver.igpio)
 set_variable_ifdef(CONFIG_ADC_MCUX_LPADC        CONFIG_MCUX_COMPONENT_driver.lpadc)
 set_variable_ifdef(CONFIG_COUNTER_MCUX_CTIMER   CONFIG_MCUX_COMPONENT_driver.ctimer)
@@ -37,6 +38,9 @@ set_variable_ifdef(CONFIG_DMA_MCUX_LPC          CONFIG_MCUX_COMPONENT_driver.lpc
 set_variable_ifdef(CONFIG_GPIO_MCUX_LPC         CONFIG_MCUX_COMPONENT_driver.lpc_gpio)
 set_variable_ifdef(CONFIG_NXP_PINT              CONFIG_MCUX_COMPONENT_driver.pint)
 set_variable_ifdef(CONFIG_NXP_INPUTMUX          CONFIG_MCUX_COMPONENT_driver.inputmux)
+set_variable_ifdef(CONFIG_MUX_NXP_TRGMUX        CONFIG_MCUX_COMPONENT_driver.trgmux)
+set_variable_ifdef(CONFIG_NXP_INPUTMUX          CONFIG_MCUX_COMPONENT_driver.inputmux_connections)
+set_variable_ifdef(CONFIG_CLOCK_MONITOR_NXP_FMEAS CONFIG_MCUX_COMPONENT_driver.fmeas)
 set_variable_ifdef(CONFIG_I2C_MCUX_FLEXCOMM     CONFIG_MCUX_COMPONENT_driver.flexcomm)
 set_variable_ifdef(CONFIG_I2C_MCUX_FLEXCOMM     CONFIG_MCUX_COMPONENT_driver.flexcomm_i2c)
 set_variable_ifdef(CONFIG_I2S_MCUX_FLEXCOMM     CONFIG_MCUX_COMPONENT_driver.flexcomm)
@@ -58,8 +62,10 @@ set_variable_ifdef(CONFIG_COUNTER_NXP_PIT       CONFIG_MCUX_COMPONENT_driver.pit
 set_variable_ifdef(CONFIG_COUNTER_MCUX_FTM      CONFIG_MCUX_COMPONENT_driver.ftm)
 set_variable_ifdef(CONFIG_COUNTER_MCUX_STM      CONFIG_MCUX_COMPONENT_driver.stm)
 set_variable_ifdef(CONFIG_COUNTER_MCUX_SYSCTR   CONFIG_MCUX_COMPONENT_driver.sysctr)
+set_variable_ifdef(CONFIG_MCUX_STM_TIMER        CONFIG_MCUX_COMPONENT_driver.stm)
 set_variable_ifdef(CONFIG_COUNTER_MCUX_RTC      CONFIG_MCUX_COMPONENT_driver.rtc)
 set_variable_ifdef(CONFIG_COUNTER_MCUX_RTC_JDP  CONFIG_MCUX_COMPONENT_driver.rtc_jdp)
+set_variable_ifdef(CONFIG_MCUX_RTC_JDP_TIMER    CONFIG_MCUX_COMPONENT_driver.rtc_jdp)
 set_variable_ifdef(CONFIG_RTC_NXP_RTC_ANALOG    CONFIG_MCUX_COMPONENT_driver.rtc_analog)
 set_variable_ifdef(CONFIG_DAC_MCUX_DAC          CONFIG_MCUX_COMPONENT_driver.dac)
 set_variable_ifdef(CONFIG_DAC_MCUX_DAC12        CONFIG_MCUX_COMPONENT_driver.dac12)
@@ -93,8 +99,10 @@ set_variable_ifdef(CONFIG_COUNTER_MCUX_QTMR     CONFIG_MCUX_COMPONENT_driver.qtm
 set_variable_ifdef(CONFIG_PWM_MCUX_QTMR         CONFIG_MCUX_COMPONENT_driver.qtmr_1)
 set_variable_ifdef(CONFIG_SPI_MCUX_DSPI         CONFIG_MCUX_COMPONENT_driver.dspi)
 set_variable_ifdef(CONFIG_SPI_MCUX_ECSPI        CONFIG_MCUX_COMPONENT_driver.ecspi)
-set_variable_ifdef(CONFIG_MCUX_FLEXIO           CONFIG_MCUX_COMPONENT_driver.flexio)
-set_variable_ifdef(CONFIG_SPI_MCUX_FLEXIO       CONFIG_MCUX_COMPONENT_driver.flexio_spi)
+set_variable_ifdef(CONFIG_MCUX_FLEXIO               CONFIG_MCUX_COMPONENT_driver.flexio)
+set_variable_ifdef(CONFIG_VIDEO_MCUX_FLEXIO   CONFIG_MCUX_COMPONENT_driver.flexio)
+set_variable_ifdef(CONFIG_VIDEO_MCUX_FLEXIO   CONFIG_MCUX_COMPONENT_driver.flexio_camera)
+set_variable_ifdef(CONFIG_SPI_MCUX_FLEXIO           CONFIG_MCUX_COMPONENT_driver.flexio_spi)
 set_variable_ifdef(CONFIG_UART_MCUX             CONFIG_MCUX_COMPONENT_driver.uart)
 set_variable_ifdef(CONFIG_UART_MCUX_LPSCI       CONFIG_MCUX_COMPONENT_driver.lpsci)
 set_variable_ifdef(CONFIG_WDT_MCUX_WDOG         CONFIG_MCUX_COMPONENT_driver.wdog)
@@ -118,10 +126,10 @@ set_variable_ifdef(CONFIG_WDT_MCUX_COP          CONFIG_MCUX_COMPONENT_driver.cop
 set_variable_ifdef(CONFIG_HAS_MCUX_RDC          CONFIG_MCUX_COMPONENT_driver.rdc)
 set_variable_ifdef(CONFIG_UART_MCUX_IUART       CONFIG_MCUX_COMPONENT_driver.iuart)
 set_variable_ifdef(CONFIG_ADC_MCUX_12B1MSPS_SAR CONFIG_MCUX_COMPONENT_driver.adc_12b1msps_sar)
-set_variable_ifdef(CONFIG_HWINFO_MCUX_SRC       CONFIG_MCUX_COMPONENT_driver.src)
+set_variable_ifdef(CONFIG_HWINFO_NXP_SRC       CONFIG_MCUX_COMPONENT_driver.src)
 set_variable_ifdef(CONFIG_DT_HAS_NXP_WUU_ENABLED CONFIG_MCUX_COMPONENT_driver.wuu)
-set_variable_ifdef(CONFIG_HWINFO_MCUX_SIM       CONFIG_MCUX_COMPONENT_driver.sim)
-set_variable_ifdef(CONFIG_HWINFO_MCUX_RCM       CONFIG_MCUX_COMPONENT_driver.rcm)
+set_variable_ifdef(CONFIG_HWINFO_NXP_SIM       CONFIG_MCUX_COMPONENT_driver.sim)
+set_variable_ifdef(CONFIG_HWINFO_NXP_RCM       CONFIG_MCUX_COMPONENT_driver.rcm)
 set_variable_ifdef(CONFIG_IPM_MCUX              CONFIG_MCUX_COMPONENT_driver.mailbox)
 set_variable_ifdef(CONFIG_MBOX_NXP_MAILBOX      CONFIG_MCUX_COMPONENT_driver.mailbox)
 set_variable_ifdef(CONFIG_COUNTER_MCUX_SNVS     CONFIG_MCUX_COMPONENT_driver.snvs_hp)
@@ -136,6 +144,7 @@ set_variable_ifdef(CONFIG_MCUX_SDIF             CONFIG_MCUX_COMPONENT_driver.sdi
 set_variable_ifdef(CONFIG_MCUX_XBARA            CONFIG_MCUX_COMPONENT_driver.xbara)
 set_variable_ifdef(CONFIG_MCUX_XBARB            CONFIG_MCUX_COMPONENT_driver.xbarb)
 set_variable_ifdef(CONFIG_QDC_MCUX              CONFIG_MCUX_COMPONENT_driver.qdc)
+set_variable_ifdef(CONFIG_EQDC_MCUX             CONFIG_MCUX_COMPONENT_driver.eqdc)
 set_variable_ifdef(CONFIG_QDEC_MCUX             CONFIG_MCUX_COMPONENT_driver.enc)
 set_variable_ifdef(CONFIG_CRYPTO_MCUX_DCP       CONFIG_MCUX_COMPONENT_driver.dcp)
 set_variable_ifdef(CONFIG_DAC_MCUX_LPDAC        CONFIG_MCUX_COMPONENT_driver.dac_1)
@@ -145,6 +154,7 @@ set_variable_ifdef(CONFIG_ADC_MCUX_GAU          CONFIG_MCUX_COMPONENT_driver.cns
 set_variable_ifdef(CONFIG_DAC_MCUX_GAU          CONFIG_MCUX_COMPONENT_driver.cns_dac)
 set_variable_ifdef(CONFIG_DAI_NXP_ESAI          CONFIG_MCUX_COMPONENT_driver.esai)
 set_variable_ifdef(CONFIG_MCUX_LPCMP            CONFIG_MCUX_COMPONENT_driver.lpcmp)
+set_variable_ifdef(CONFIG_MCUX_SYSCTR_TIMER     CONFIG_MCUX_COMPONENT_driver.sysctr)
 if(CONFIG_NXP_RF_IMU)
     if(CONFIG_SOC_MCXW70AC)
         set(CONFIG_MCUX_COMPONENT_driver.mu1 ON)
@@ -174,6 +184,9 @@ set_variable_ifdef(CONFIG_OPAMP_MCUX_OPAMP          CONFIG_MCUX_COMPONENT_driver
 set_variable_ifdef(CONFIG_OPAMP_MCUX_OPAMP_FAST     CONFIG_MCUX_COMPONENT_driver.opamp_fast)
 set_variable_ifdef(CONFIG_CRC_DRIVER_NXP        CONFIG_MCUX_COMPONENT_driver.crc)
 set_variable_ifdef(CONFIG_CRC_DRIVER_NXP_LPC    CONFIG_MCUX_COMPONENT_driver.lpc_crc)
+set_variable_ifdef(CONFIG_CLOCK_MONITOR_NXP_CMU_FC CONFIG_MCUX_COMPONENT_driver.cmu_fc)
+set_variable_ifdef(CONFIG_CLOCK_MONITOR_NXP_CMU_FM CONFIG_MCUX_COMPONENT_driver.cmu_fm)
+set_variable_ifdef(CONFIG_CLOCK_MONITOR_NXP_FREQME CONFIG_MCUX_COMPONENT_driver.lpc_freqme)
 set_variable_ifdef(CONFIG_PHY_NXP_T1S           CONFIG_MCUX_COMPONENT_driver.tenbaset_phy)
 set_variable_ifdef(CONFIG_AUXDISPLAY_NXP_SLCD CONFIG_MCUX_COMPONENT_driver.slcd)
 
@@ -195,6 +208,9 @@ if(CONFIG_DMA_MCUX_SMARTDMA)
   endif()
   if(CONFIG_SOC_FAMILY_MCXN)
     set(CONFIG_MCUX_COMPONENT_driver.smartdma_mcxn ON)
+  endif()
+  if(CONFIG_SOC_FAMILY_MCXA)
+    set(CONFIG_MCUX_COMPONENT_driver.smartdma_mcxa ON)
   endif()
 endif()
 
@@ -223,7 +239,7 @@ if(CONFIG_DT_HAS_NXP_SPC_ENABLED AND CONFIG_SOC_FAMILY_MCXW)
   set(CONFIG_MCUX_COMPONENT_driver.spc ON)
 endif()
 
-if(CONFIG_DT_HAS_NXP_CMC_ENABLED OR CONFIG_HWINFO_MCUX_MCX_CMC)
+if(CONFIG_DT_HAS_NXP_CMC_ENABLED OR CONFIG_HWINFO_NXP_CMC)
   if(CONFIG_SOC_FAMILY_MCXN OR CONFIG_SOC_FAMILY_MCXA OR CONFIG_SOC_FAMILY_MCXL)
     set(CONFIG_MCUX_COMPONENT_driver.mcx_cmc ON)
   else() # KW, MCXW
@@ -272,7 +288,7 @@ endif()
 
 if(CONFIG_SOC_MK82F25615 OR CONFIG_SOC_MK64F12 OR CONFIG_SOC_MK66F18 OR
     CONFIG_SOC_MKE14F16 OR CONFIG_SOC_MKE16F16 OR CONFIG_SOC_MKE18F16 OR
-    CONFIG_SOC_MK22F12)
+    CONFIG_SOC_MK22F12 OR CONFIG_SOC_SERIES_MCXE24X)
   set(CONFIG_MCUX_COMPONENT_driver.sysmpu ON)
 endif()
 
@@ -290,6 +306,11 @@ endif()
 
 if(CONFIG_SOC_S32K344 OR CONFIG_SOC_SERIES_MCXE31X)
   set_variable_ifdef(CONFIG_SOC_FLASH_MCUX_C40 CONFIG_MCUX_COMPONENT_driver.flash_c40)
+endif()
+
+# MCXE31X routes the RTC alarm through the WKPU to wake from standby in sys_poweroff
+if(CONFIG_SOC_SERIES_MCXE31X AND CONFIG_POWEROFF)
+  set(CONFIG_MCUX_COMPONENT_driver.wkpu ON)
 endif()
 
 if(CONFIG_SOC_SERIES_LPC51U68 OR CONFIG_SOC_SERIES_LPC54XXX)
@@ -313,6 +334,16 @@ if(CONFIG_SOC_SERIES_LPC51U68 OR CONFIG_SOC_SERIES_LPC54XXX OR CONFIG_SOC_SERIES
   set(CONFIG_MCUX_COMPONENT_driver.lpc_iocon ON)
 endif()
 
+if(CONFIG_SOC_SERIES_LPC84X)
+  if(CONFIG_PINCTRL_LPC84X)
+    set(CONFIG_MCUX_COMPONENT_driver.swm ON)
+    set(CONFIG_MCUX_COMPONENT_driver.lpc_iocon_lite ON)
+  endif()
+  set_variable_ifdef(CONFIG_UART_LPC84X CONFIG_MCUX_COMPONENT_driver.lpc_miniusart)
+  zephyr_library_compile_definitions_ifdef(CONFIG_UART_LPC84X FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL=1)
+  set_variable_ifdef(CONFIG_FLASH_SOC_LPC84X_IAP CONFIG_MCUX_COMPONENT_driver.iap)
+endif()
+
 if(CONFIG_SOC_LPC55S36)
   set_variable_ifdef(CONFIG_ADC_MCUX_LPADC CONFIG_MCUX_COMPONENT_driver.vref_1)
   set_variable_ifdef(CONFIG_DAC_MCUX_LPDAC CONFIG_MCUX_COMPONENT_driver.vref_1)
@@ -326,7 +357,7 @@ if(CONFIG_SOC_SERIES_IMXRT7XX)
   if(CONFIG_DT_HAS_NXP_PMC_TMPSNS_ENABLED)
     set(CONFIG_MCUX_COMPONENT_driver.romapi ON)
   endif()
-  set_variable_ifdef(CONFIG_HWINFO_MCUX_RSTCTL   CONFIG_MCUX_COMPONENT_driver.reset)
+  set_variable_ifdef(CONFIG_HWINFO_NXP_RSTCTL   CONFIG_MCUX_COMPONENT_driver.reset)
 endif()
 
 if(CONFIG_SOC_SERIES_RW6XX)
@@ -404,6 +435,26 @@ if((DEFINED CONFIG_FLASH_MCUX_XSPI_XIP) AND (DEFINED CONFIG_FLASH))
     LOCATION ${CONFIG_FLASH_MCUX_XSPI_XIP_MEM}_TEXT)
   zephyr_code_relocate(FILES ${MCUX_SDK_NG_DIR}/drivers/xspi/fsl_xspi.c
     LOCATION ${CONFIG_FLASH_MCUX_XSPI_XIP_MEM}_RODATA)
+endif()
+
+if(CONFIG_ADVC_DRIVER_USED)
+  # Pull in fsl_advc.c/.h directly instead of turning on the whole
+  # driver.advc component: that component's device CMakeLists.txt
+  # (devices/MCX/MCXL/MCXL255/drivers/CMakeLists.txt) also links
+  # libadvc_cm33.a/libadvc_cm0p.a straight from the device tree, which
+  # doesn't exist for Zephyr (those binaries are fetched via `west blobs`
+  # into zephyr/blobs/mcxl255 instead). Linking the correct blob path below
+  # avoids ever adding the wrong one, so no fixup.cmake cleanup is needed.
+  set(advc_drivers_dir ${SdkRootDirPath}/devices/MCX/MCXL/MCXL255/drivers)
+  zephyr_library_sources(${advc_drivers_dir}/fsl_advc.c)
+  zephyr_include_directories(${advc_drivers_dir})
+
+  set(advc_blobs_dir ${ZEPHYR_HAL_NXP_MODULE_DIR}/zephyr/blobs/mcxl255)
+  if(CONFIG_SOC_MCXL255_CPU0)
+    target_link_libraries(${MCUX_SDK_PROJECT_NAME} PRIVATE ${advc_blobs_dir}/libadvc_cm33.a)
+  elseif(CONFIG_SOC_MCXL255_CPU1)
+    target_link_libraries(${MCUX_SDK_PROJECT_NAME} PRIVATE ${advc_blobs_dir}/libadvc_cm0p.a)
+  endif()
 endif()
 
 # Load all drivers
