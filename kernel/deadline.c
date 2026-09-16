@@ -25,6 +25,7 @@
 #include <zephyr/sys/minmax.h>
 #include <zephyr/logging/log.h>
 
+ LOG_MODULE_DECLARE(os, LOG_LEVEL_DBG);
 /**
  * @brief Atomically update a thread's prio_deadline in the run queue.
  *
@@ -36,7 +37,8 @@
  * @param thread   Thread whose deadline is being updated.
  * @param deadline New absolute deadline value (raw cycle counter).
  */
-void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
+
+void z_sched_prio_deadline_set_64(struct k_thread *thread, uint64_t deadline)
 {
 	Z_SCHED_SPINLOCK {
 		if (z_is_thread_queued(thread)) {
@@ -49,7 +51,8 @@ void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
 	}
 }
 
-void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
+
+void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
 {
 	struct k_thread *thread = tid;
 
@@ -60,24 +63,38 @@ void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 	 * z_sched_prio_deadline_set() which performs it under the
 	 * scheduler spinlock.
 	 */
-	z_sched_prio_deadline_set(thread, deadline);
+	z_sched_prio_deadline_set_64(thread, deadline);
+}
+	
+void z_impl_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
+{
+	deadline = clamp(deadline, 0, UINT64_MAX);
+	uint64_t newdl = k_cycle_get_64() + deadline;
+	z_impl_k_thread_absolute_deadline_set_64(tid, newdl);
+}
+
+/*
+*32 bit wrapper for compatibility, will call the 64 bit version of the API. 
+*/
+void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
+{
+	struct k_thread *thread = tid;
+	 uint32_t newdl =(uint32_t)deadline ; 
+	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
 }
 
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 {
-	/*
-	 * Clamp the relative deadline to INT32_MAX / 2 (2^30 cycles) to
-	 * satisfy the scheduler comparator's half-modulus invariant.
-	 * This leaves a 2^30-cycle margin of tolerance for scheduler
-	 * execution skew before priority inversion can occur.
-	 */
-	deadline = clamp(deadline, 0, INT32_MAX / 2);
-
-	/* Use uint32_t arithmetic to avoid implementation-defined signed conversion. */
-	uint32_t newdl = k_cycle_get_32() + (uint32_t)deadline;
-
-	z_impl_k_thread_absolute_deadline_set(tid, (int)newdl);
+	 uint32_t newdl =(uint32_t)deadline ; 
+	 z_impl_k_thread_deadline_set_64(thread, (uint64_t)newdl);
 }
+
+void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
+{
+uint32_t newdl =(uint32_t)deadline ; 
+	z_sched_prio_deadline_set_64(thread, (uint64_t)newdl);
+}
+
 
 #ifdef CONFIG_USERSPACE
 static inline void z_vrfy_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
@@ -85,9 +102,19 @@ static inline void z_vrfy_k_thread_absolute_deadline_set(k_tid_t tid, int deadli
 	struct k_thread *thread = tid;
 
 	K_OOPS(K_SYSCALL_OBJ(thread, K_OBJ_THREAD));
-
+ 
 	z_impl_k_thread_absolute_deadline_set((k_tid_t)thread, deadline);
 }
+
+static inline void z_vrfy_k_thread_absolute_deadline_set_64(k_tid_t tid, uint64_t deadline)
+{
+	struct k_thread *thread = tid;
+
+	K_OOPS(K_SYSCALL_OBJ(thread, K_OBJ_THREAD));
+
+	z_impl_k_thread_absolute_deadline_set_64((k_tid_t)thread, deadline);
+}
+
 #include <zephyr/syscalls/k_thread_absolute_deadline_set_mrsh.c>
 
 static inline void z_vrfy_k_thread_deadline_set(k_tid_t tid, int deadline)
@@ -100,6 +127,18 @@ static inline void z_vrfy_k_thread_deadline_set(k_tid_t tid, int deadline)
 				    (int)deadline));
 
 	z_impl_k_thread_deadline_set((k_tid_t)thread, deadline);
+}
+
+static inline void z_vrfy_k_thread_deadline_set_64(k_tid_t tid, uint64_t deadline)
+{
+	struct k_thread *thread = tid;
+
+	K_OOPS(K_SYSCALL_OBJ(thread, K_OBJ_THREAD));
+	K_OOPS(K_SYSCALL_VERIFY_MSG(deadline > 0,
+				    "invalid thread deadline %PRIu64",
+				    (uint64_t)deadline));
+
+	z_impl_k_thread_deadline_set_64((k_tid_t)thread, deadline);
 }
 #include <zephyr/syscalls/k_thread_deadline_set_mrsh.c>
 #endif /* CONFIG_USERSPACE */
