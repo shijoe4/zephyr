@@ -79,12 +79,12 @@ void z_impl_k_thread_deadline_set_64(k_tid_t tid, int64_t deadline)
 void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 {
 	struct k_thread *thread = tid;
-	z_sched_prio_deadline_set_64(thread, (int64_t)newdl);
+	z_sched_prio_deadline_set_64(thread, (int64_t)deadline);
 }
 
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 {
-	 z_impl_k_thread_deadline_set_64(thread, (int64_t)newdl);
+	 z_impl_k_thread_deadline_set_64(tid, (int64_t)deadline);
 }
 
 void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
