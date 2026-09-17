@@ -138,6 +138,14 @@ config SCHED_DEADLINE
 	  single priority will choose the next expiring deadline and
 	  not simply the least recently added thread.
 
+config MUTEX_CEILING_FLOOR
+	bool
+	default y if !SMP
+	help
+	  Enable support for mutex priority ceiling and floor protocols.
+	  This helps prevent priority inversion issues in single-CPU environments.
+
+
 config MAIN_STACK_SIZE
 	int "Size of stack for initialization and main thread"
 	default 2048 if COVERAGE_GCOV
