@@ -12,7 +12,7 @@
 bool z_priq_rb_lessthan(struct rbnode *a, struct rbnode *b)
 {
 	struct k_thread *thread_a, *thread_b;
-	int32_t cmp;
+	int64_t cmp;
 
 	thread_a = CONTAINER_OF(a, struct k_thread, base.qnode_rb);
 	thread_b = CONTAINER_OF(b, struct k_thread, base.qnode_rb);

@@ -110,7 +110,7 @@ BUILD_ASSERT(sizeof(intptr_t) == sizeof(long));
 #define Z_POLL_EVENT_OBJ_INIT(obj)
 #define Z_DECL_POLL_EVENT
 #endif
-
+structk_mutex_ceiling_floor;
 struct k_thread;
 struct k_mutex;
 struct k_sem;
@@ -1114,16 +1114,16 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * @brief Set relative deadline expiration time for scheduler
  *
  * This sets the "deadline" expiration as a time delta from the
- * current time, in the same units used by k_cycle_get_32().  The
+ * current time, in the same units used by k_cycle_get_64().  The
  * scheduler (when deadline scheduling is enabled) will choose the
  * next expiring thread when selecting between threads at the same
  * static priority.  Threads at different priorities will be scheduled
  * according to their static priority.
  *
- * @note Deadlines are stored internally using 32 bit unsigned
+ * @note Deadlines are stored internally using 64 bit unsigned
  * integers.  The number of cycles between the "first" deadline in the
- * scheduler queue and the "last" deadline must be less than 2^31 (i.e
- * a signed non-negative quantity).  Failure to adhere to this rule
+ * scheduler queue and the "last" deadline must be less than 2^64.
+ * Failure to adhere to this rule
  * may result in scheduled threads running in an incorrect deadline
  * order.
  *
@@ -1135,9 +1135,9 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * above this call, which is simply input to the priority selection
  * logic.
  *
- * @note The relative deadline is silently clamped to the range
- * [0, INT32_MAX / 2] (2^30 cycles) to preserve the scheduler's modular
- * comparison invariants; negative values are clamped up to 0.
+ * @note The relative deadline is silently clamped to a maximum of
+ * UINT64_MAX (2^64 cycles) to preserve the scheduler's modular
+ * comparison invariants.
  *
  * @kconfig_dep{CONFIG_SCHED_DEADLINE}
  *
@@ -1145,49 +1145,19 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * @param deadline A time delta, in cycle units
  *
  */
+__syscall void k_thread_deadline_set_64(k_tid_t thread, int64_t deadline); 
+
+/*
+32-bit version of k_thread_deadline_set, for backwards compatibility with existing code. 
+ * @param thread A thread on which to set the deadline
+ * @param deadline A time delta, in cycle units
+ */
+
 __syscall void k_thread_deadline_set(k_tid_t thread, int deadline);
 
-/**
- * @brief Set absolute deadline expiration time for scheduler
- *
- * This sets the "deadline" expiration as a timestamp in the same
- * units used by k_cycle_get_32(). The scheduler (when deadline scheduling
- * is enabled) will choose the next expiring thread when selecting between
- * threads at the same static priority.  Threads at different priorities
- * will be scheduled according to their static priority.
- *
- * Unlike @ref k_thread_deadline_set which sets a relative timestamp to a
- * "now" implicitly determined during its call, this routine sets an
- * absolute timestamp that is computed from a timestamp relative to
- * an explicit "now" that was determined before this routine is called.
- * This allows the caller to specify deadlines for multiple threads
- * using a common "now".
- *
- * @note Deadlines are stored internally using 32 bit unsigned
- * integers.  The number of cycles between the "first" deadline in the
- * scheduler queue and the "last" deadline must be less than 2^31 (i.e
- * a signed non-negative quantity).  Failure to adhere to this rule
- * may result in scheduled threads running in an incorrect deadline
- * order.
- *
- * @note Even if a provided timestamp is in the past, the kernel will
- * still schedule threads with deadlines in order from the earliest to
- * the latest.
- *
- * @note Despite the API naming, the scheduler makes no guarantees
- * the thread WILL be scheduled within that deadline, nor does it take
- * extra metadata (like e.g. the "runtime" and "period" parameters in
- * Linux sched_setattr()) that allows the kernel to validate the
- * scheduling for achievability.  Such features could be implemented
- * above this call, which is simply input to the priority selection
- * logic.
- *
- * @kconfig_dep{CONFIG_SCHED_DEADLINE}
- *
- * @param thread A thread on which to set the deadline
- * @param deadline A timestamp, in cycle units
- */
 __syscall void k_thread_absolute_deadline_set(k_tid_t thread, int deadline);
+
+__syscall void k_thread_absolute_deadline_set_64(k_tid_t thread, int64_t deadline);
 #endif
 
 /**
@@ -3624,6 +3594,66 @@ __syscall int k_mutex_unlock(struct k_mutex *mutex);
 /**
  * @}
  */
+
+
+/**
+ * @}
+ */
+
+/*
+adding new mutex api to
+*/
+
+
+
+struct k_mutex_ceiling_floor {
+   // use lock to access it
+   // the ceiling of the resource protected by this mutex interger value
+    int resource_ceiling;
+    // the floor of the resource protected by this mutex interger value
+    int64_t resource_floor;
+
+    /** Mutex wait queue */
+	 _wait_q_t wait_q;
+	/** Mutex owner */
+	struct k_thread *owner;
+
+	/** Current lock count */
+	uint32_t lock_count;
+
+	/** Original thread priority */
+	int owner_orig_prio;
+    int owner_ceiling_prio;
+    int64_t owner_original_floor_prio;
+    int64_t owner_floor_prio;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_mutex_ceiling_floor);
+
+#ifdef CONFIG_OBJ_CORE_MUTEX
+	struct k_obj_core obj_core;
+#endif
+
+
+};
+
+
+__syscall int k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling, int64_t resource_floor);
+
+__syscall int k_mutex_ceiling_floor_lock(struct k_mutex_ceiling_floor *mutex, k_timeout_t timeout);
+
+__syscall int k_mutex_ceiling_floor_unlock(struct k_mutex_ceiling_floor *mutex);
+
+
+__syscall int k_mutex_ceiling_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling);
+
+__syscall int k_mutex_ceiling_lock(struct k_mutex_ceiling_floor *mutex, k_timeout_t timeout);
+
+__syscall int k_mutex_ceiling_unlock(struct k_mutex_ceiling_floor *mutex);
+
+
+
+
+
 
 /**
  * @brief Kernel condition variable structure

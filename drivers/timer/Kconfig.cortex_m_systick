@@ -31,6 +31,7 @@ config CORTEX_M_SYSTICK_64BIT_CYCLE_COUNTER
 	depends on CORTEX_M_SYSTICK
 	default y if (SYS_CLOCK_HW_CYCLES_PER_SEC > 60000000)
 	select TIMER_HAS_64BIT_CYCLE_COUNTER
+	
 	help
 	  The generic timer core extends this driver's 32-bit software cycle
 	  count from its own announce baseline, so sys_clock_cycle_get_64() is
@@ -40,6 +41,14 @@ config CORTEX_M_SYSTICK_64BIT_CYCLE_COUNTER
 
 	  This is set to y by default when the hardware clock is fast enough
 	  to wrap sys_clock_cycle_get_32() in about a minute or less.
+
+config CORTEX_M_SYSTICK_64BIT_CYCLE_COUNTER_AUTO
+	bool
+	default y
+	depends on CORTEX_M_SYSTICK && SYS_CLOCK_EXISTS
+	depends on SCHED_DEADLINE
+	select CORTEX_M_SYSTICK_64BIT_CYCLE_COUNTER
+
 
 if CORTEX_M_SYSTICK
 
