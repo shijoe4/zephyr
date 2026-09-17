@@ -101,9 +101,6 @@ else()
     scheduler.c
     )
 
-  if(MUTEX_CEILING_FLOOR)  
-  kernel_sources(mutex_ceiling_floor.c)
-  endif()
 
   if(CONFIG_MULTITHREADING)
     if(CONFIG_SCHED_SCALABLE OR CONFIG_WAITQ_SCALABLE)
