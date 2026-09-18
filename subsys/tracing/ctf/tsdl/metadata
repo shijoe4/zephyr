@@ -5,6 +5,7 @@ typealias integer { size = 16; align = 8; signed = false; } := uint16_t;
 typealias integer { size = 32; align = 8; signed = false; } := uint32_t;
 typealias integer { size = 32; align = 8; signed = true; } := int32_t;
 typealias integer { size = 64; align = 8; signed = false; } := uint64_t;
+typealias integer { size = 64; align = 8; signed = true; } := int64_t;
 typealias integer { size = 8; align = 8; signed = false; encoding = ASCII; } := ctf_bounded_string_t;
 
 struct event_header {
@@ -3378,5 +3379,92 @@ event {
 	fields := struct {
 		uint32_t timeout;
 		int32_t ret;
+	};
+};
+
+
+
+event {
+	name = thread_deadline_set;
+	id = 0x186;
+	fields := struct {
+		uint32_t thread_id;
+		ctf_bounded_string_t name[20];
+		int64_t deadline;
+	};
+
+};
+
+event {
+	name = thread_absolute_deadline_set;
+	id = 0x187;
+	fields := struct {
+		uint32_t thread_id;
+		ctf_bounded_string_t name[20];
+		int64_t deadline;
+	};
+
+};
+
+event {
+	name = thread_sched_deadline_set;
+	id = 0x188;
+	fields := struct {
+		uint32_t thread_id;
+		int64_t deadline;
+		ctf_bounded_string_t name[20];
+	};
+};
+
+event {
+	name = thread_sched_absolute_deadline_set;
+	id = 0x189;
+	fields := struct {
+		uint32_t thread_id;
+		int64_t deadline;
+		ctf_bounded_string_t name[20];
+	};
+};
+
+
+event {
+	name = thread_deadline_set_64;
+	id = 0x18A;
+	fields := struct {
+		uint32_t thread_id;
+		ctf_bounded_string_t name[20];
+		int64_t deadline;
+	};
+
+};
+
+event {
+	name = thread_absolute_deadline_set_64;
+	id = 0x18B;
+	fields := struct {
+		uint32_t thread_id;
+		ctf_bounded_string_t name[20];
+		int64_t deadline;
+	};
+
+};
+
+event {
+	name = thread_sched_deadline_set_64;
+	id = 0x18C;
+	fields := struct {
+		uint32_t thread_id;
+		int64_t deadline;
+		ctf_bounded_string_t name[20];
+	};
+};
+
+event {
+	name = thread_sched_absolute_deadline_set_64;
+	id = 0x18D;
+	fields := struct {
+		uint32_t thread_id;
+		int64_t deadline;
+		ctf_bounded_string_t name[20];
 	};
 };

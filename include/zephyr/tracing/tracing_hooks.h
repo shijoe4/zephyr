@@ -193,6 +193,44 @@
 #endif
 
 /**
+ * @brief Called when setting priority of a thread
+ * @param thread Thread object
+ */
+#ifndef sys_port_trace_k_thread_deadline_set
+#define sys_port_trace_k_thread_deadline_set(thread, deadline)
+#endif
+
+/**
+ * @brief Called when setting absolute deadline of a thread
+ * @param thread Thread object
+ * @param deadline Absolute deadline
+ */
+#ifndef sys_port_trace_k_thread_absolute_deadline_set
+#define sys_port_trace_k_thread_absolute_deadline_set(thread, deadline)
+#endif
+
+
+
+/**
+ * @brief Called when setting priority of a thread
+ * @param thread Thread object
+ */
+#ifndef sys_port_trace_k_thread_deadline_set_64
+#define sys_port_trace_k_thread_deadline_set_64(thread, deadline)
+#endif
+
+/**
+ * @brief Called when setting absolute deadline of a thread
+ * @param thread Thread object
+ * @param deadline Absolute deadline
+ */
+#ifndef sys_port_trace_k_thread_absolute_deadline_set_64
+#define sys_port_trace_k_thread_absolute_deadline_set_64(thread, deadline)
+#endif
+
+
+
+/**
  * @brief Called when a thread enters the k_thread_suspend
  * function.
  * @param thread Thread object

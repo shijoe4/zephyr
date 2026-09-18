@@ -79,6 +79,45 @@ void sys_trace_k_thread_priority_set(struct k_thread *thread)
 	ctf_top_thread_priority_set((uint32_t)(uintptr_t)thread, thread->base.prio, name);
 }
 
+void sys_trace_k_thread_deadline_set(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+	ctf_top_thread_deadline_set((uint32_t)(uintptr_t)thread, deadline, name);
+}
+
+void sys_trace_k_thread_absolute_deadline_set(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+
+	ctf_top_thread_absolute_deadline_set((uint32_t)(uintptr_t)thread, thread->base.prio_deadline, name);
+
+	
+}
+
+void sys_trace_k_thread_deadline_set_64(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+	ctf_top_thread_deadline_set_64((uint32_t)(uintptr_t)thread, deadline, name);
+}
+
+void sys_trace_k_thread_absolute_deadline_set_64(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+
+	ctf_top_thread_absolute_deadline_set_64((uint32_t)(uintptr_t)thread, thread->base.prio_deadline, name);
+
+	
+}
+
+
 void sys_trace_k_thread_sleep_ticks_enter(k_timeout_t timeout)
 {
 	ctf_top_thread_sleep_ticks_enter(k_ticks_to_us_floor32((uint32_t)timeout.ticks));
@@ -266,6 +305,45 @@ void sys_trace_k_thread_sched_priority_set(struct k_thread *thread, int prio)
 	_get_thread_name(thread, &name);
 	ctf_top_thread_sched_priority_set((uint32_t)(uintptr_t)thread, (int8_t)prio, name);
 }
+
+
+
+
+void sys_trace_k_thread_sched_deadline_set(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+	ctf_top_thread_sched_deadline_set((uint32_t)(uintptr_t)thread, (int64_t)deadline, name);
+}
+
+void sys_trace_k_thread_sched_absolute_deadline_set(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+	ctf_top_thread_sched_absolute_deadline_set((uint32_t)(uintptr_t)thread, (int64_t)deadline, name);
+}
+
+
+void sys_trace_k_thread_sched_deadline_set_64(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+	ctf_top_thread_sched_deadline_set_64((uint32_t)(uintptr_t)thread, (int64_t)deadline, name);
+}
+
+void sys_trace_k_thread_sched_absolute_deadline_set_64(struct k_thread *thread, int64_t deadline)
+{
+	ctf_bounded_string_t name = {"unknown"};
+
+	_get_thread_name(thread, &name);
+	ctf_top_thread_sched_absolute_deadline_set_64((uint32_t)(uintptr_t)thread, (int64_t)deadline, name);
+}
+
+
+
 
 void sys_trace_k_thread_sched_ready(struct k_thread *thread)
 {

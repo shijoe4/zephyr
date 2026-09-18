@@ -34,6 +34,7 @@ void sys_trace_sys_init_exit_user(const struct init_entry *entry, int level, int
 void sys_trace_k_thread_sleep_ticks_enter_user(k_timeout_t timeout);
 void sys_trace_k_thread_sleep_ticks_exit_user(k_timeout_t timeout, int32_t ret);
 
+
 void sys_trace_thread_create(struct k_thread *thread);
 void sys_trace_thread_abort(struct k_thread *thread);
 void sys_trace_thread_suspend(struct k_thread *thread);
