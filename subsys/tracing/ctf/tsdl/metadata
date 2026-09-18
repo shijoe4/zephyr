@@ -3407,7 +3407,7 @@ event {
 };
 
 event {
-	name = thread_sched_deadline_set;
+	name = thread_sched_prio_deadline_set;
 	id = 0x188;
 	fields := struct {
 		uint32_t thread_id;
@@ -3417,7 +3417,7 @@ event {
 };
 
 event {
-	name = thread_sched_absolute_deadline_set;
+	name = thread_sched_prio_absolute_deadline_set;
 	id = 0x189;
 	fields := struct {
 		uint32_t thread_id;
@@ -3450,7 +3450,7 @@ event {
 };
 
 event {
-	name = thread_sched_deadline_set_64;
+	name = thread_sched_prio_deadline_set_64;
 	id = 0x18C;
 	fields := struct {
 		uint32_t thread_id;
@@ -3460,7 +3460,7 @@ event {
 };
 
 event {
-	name = thread_sched_absolute_deadline_set_64;
+	name = thread_sched_prio_absolute_deadline_set_64;
 	id = 0x18D;
 	fields := struct {
 		uint32_t thread_id;

@@ -352,6 +352,49 @@
 #define sys_port_trace_k_thread_sched_priority_set(thread, prio)
 #endif
 
+
+/**
+ * @brief Trace implicit thread set priority invocation by the scheduler
+ * @param thread Thread object
+ * @param prio Thread priority
+ */
+#ifndef sys_port_trace_k_thread_sched_prio_deadline_set
+#define sys_port_trace_k_thread_sched_prio_deadline_set(thread, deadline)
+#endif
+
+
+
+/**
+ * @brief Called when setting absolute deadline of a thread
+ * @param thread Thread object
+ * @param deadline Absolute deadline
+ */
+#ifndef sys_port_trace_k_thread_sched_prio_absolute_deadline_set
+#define sys_port_trace_k_thread_sched_prio_absolute_deadline_set(thread, deadline)
+#endif
+
+
+
+/**
+ * @brief Called when setting priority of a thread
+ * @param thread Thread object
+ */
+#ifndef sys_port_trace_k_thread_sched_prio_deadline_set_64
+#define sys_port_trace_k_thread_sched_prio_deadline_set_64(thread, deadline)
+#endif
+
+/**
+ * @brief Called when setting absolute deadline of a thread
+ * @param thread Thread object
+ * @param deadline Absolute deadline
+ */
+#ifndef sys_port_trace_k_thread_sched_prio_absolute_deadline_set_64
+#define sys_port_trace_k_thread_sched_prio_absolute_deadline_set_64(thread, deadline)
+#endif
+
+
+
+
 /**
  * @brief Trace implicit thread ready invocation by the scheduler
  * @param thread Thread object

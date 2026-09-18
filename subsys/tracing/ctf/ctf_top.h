@@ -499,12 +499,12 @@ typedef enum {
 
 	CTF_EVENT_THREAD_DEADLINE_SET = 0x186,
 	CTF_EVENT_THREAD_ABSOLUTE_DEADLINE_SET = 0x187,
-	CTF_EVENT_THREAD_SCHED_DEADLINE_SET = 0x188,
-	CTF_EVENT_THREAD_SCHED_ABSOLUTE_DEADLINE_SET = 0x189,
+	CTF_EVENT_THREAD_SCHED_PRIO_DEADLINE_SET = 0x188,
+	CTF_EVENT_THREAD_SCHED_PRIO_ABSOLUTE_DEADLINE_SET = 0x189,
 	CTF_EVENT_THREAD_DEADLINE_SET_64 = 0x18A,
 	CTF_EVENT_THREAD_ABSOLUTE_DEADLINE_SET_64 = 0x18B,
-	CTF_EVENT_THREAD_SCHED_DEADLINE_SET_64 = 0x18C,
-	CTF_EVENT_THREAD_SCHED_ABSOLUTE_DEADLINE_SET_64 = 0x18D,
+	CTF_EVENT_THREAD_SCHED_PRIO_DEADLINE_SET_64 = 0x18C,
+	CTF_EVENT_THREAD_SCHED_PRIO_ABSOLUTE_DEADLINE_SET_64 = 0x18D,
 
 } ctf_event_t;
 
@@ -703,40 +703,40 @@ static inline void ctf_top_thread_sched_abort(uint32_t thread_id, ctf_bounded_st
 static inline void ctf_top_thread_sched_priority_set(uint32_t thread_id, int8_t prio,
 						     ctf_bounded_string_t name)
 {
-	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_PRIORITY_SET), thread_id, prio,
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_PRIO_PRIORITY_SET), thread_id, prio,
 		  name);
 
 }
 
 
-static inline void ctf_top_thread_sched_deadline_set(uint32_t thread_id, int64_t deadline,
+static inline void ctf_top_thread_sched_prio_deadline_set(uint32_t thread_id, int64_t deadline,
 						     ctf_bounded_string_t name)
 {
-	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_DEADLINE_SET), thread_id, deadline, name);
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_PRIO_DEADLINE_SET), thread_id, deadline, name);
 }
 
 
 
-static inline void ctf_top_thread_sched_absolute_deadline_set(uint32_t thread_id, int64_t deadline,
+static inline void ctf_top_thread_sched_prio_absolute_deadline_set(uint32_t thread_id, int64_t deadline,
 						       ctf_bounded_string_t name)
 {
-	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_ABSOLUTE_DEADLINE_SET), thread_id, deadline, name);
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_PRIO_ABSOLUTE_DEADLINE_SET), thread_id, deadline, name);
 }
 
 
 
-static inline void ctf_top_thread_sched_deadline_set_64(uint32_t thread_id, int64_t deadline,
+static inline void ctf_top_thread_sched_prio_deadline_set_64(uint32_t thread_id, int64_t deadline,
 						     ctf_bounded_string_t name)
 {
-	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_DEADLINE_SET_64), thread_id, deadline, name);
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_PRIO_DEADLINE_SET_64), thread_id, deadline, name);
 }
 
 
 
-static inline void ctf_top_thread_sched_absolute_deadline_set_64(uint32_t thread_id, int64_t deadline,
+static inline void ctf_top_thread_sched_prio_absolute_deadline_set_64(uint32_t thread_id, int64_t deadline,
 						       ctf_bounded_string_t name)
 {
-	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_ABSOLUTE_DEADLINE_SET_64), thread_id, deadline, name);
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_THREAD_SCHED_PRIO_ABSOLUTE_DEADLINE_SET_64), thread_id, deadline, name);
 }
 
 
