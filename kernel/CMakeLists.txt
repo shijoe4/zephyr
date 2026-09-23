@@ -111,7 +111,7 @@ else()
     kernel_sources(nothread.c)
   endif() # CONFIG_MULTITHREADING
 
-
+  kernel_sources_ifdef(CONFIG_MUTEX_CEILING_FLOOR mutex_ceiling_floor.c)
   kernel_sources_ifdef(CONFIG_TIMESLICING timeslicing.c)
   kernel_sources_ifdef(CONFIG_SCHED_DEADLINE deadline.c)
   kernel_sources_ifdef(CONFIG_SPIN_VALIDATE spinlock_validate.c)

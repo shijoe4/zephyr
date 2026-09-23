@@ -137,6 +137,14 @@ config SCHED_DEADLINE
 	  k_cycle_get_64() units.  Priority decisions within (!!) a
 	  single priority will choose the next expiring deadline and
 	  not simply the least recently added thread.
+config MUTEX_CEILING_FLOOR
+    bool "Mutex ceiling/floor priority support"
+    depends on MULTITHREADING
+    depends on !SMP
+    default n
+    help
+      Enable mutex ceiling/floor priority support for uniprocessor 
+      multithreaded systems.
 
 
 config MAIN_STACK_SIZE
