@@ -21,6 +21,7 @@ void __weak sys_trace_thread_info_user(struct k_thread *thread) {}
 void __weak sys_trace_thread_sched_ready_user(struct k_thread *thread) {}
 void __weak sys_trace_thread_pend_user(struct k_thread *thread) {}
 void __weak sys_trace_thread_priority_set_user(struct k_thread *thread, int prio) {}
+void __weak sys_trace_thread_deadline_set_64_user(struct k_thread *thread, int64_t deadline) {}
 void __weak sys_trace_isr_enter_user(void) {}
 void __weak sys_trace_isr_exit_user(void) {}
 void __weak sys_trace_idle_user(void) {}
@@ -203,6 +204,11 @@ void sys_trace_thread_info(struct k_thread *thread)
 void sys_trace_thread_sched_priority_set(struct k_thread *thread, int prio)
 {
 	sys_trace_thread_priority_set_user(thread, prio);
+}
+
+void sys_trace_thread_sched_prio_deadline_set(struct k_thread *thread, int64_t deadline)
+{
+	sys_trace_thread_sched_prio_deadline_set_user(thread, deadline);
 }
 
 void sys_trace_thread_sched_ready(struct k_thread *thread)

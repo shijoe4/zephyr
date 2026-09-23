@@ -80,9 +80,8 @@ extern struct k_event *_track_list_k_event;
 #define sys_port_track_k_thread_wakeup(thread)
 #define sys_port_track_k_thread_sched_priority_set(thread, prio)
 #define sys_port_track_k_thread_sched_prio_deadline_set(thread, deadline)
-#define sys_port_track_k_thread_sched_prio_absolute_deadline_set(thread, deadline)
-#define sys_port_track_k_thread_sched_prio_deadline_set_64(thread, deadline)
-#define sys_port_track_k_thread_sched_prio_absolute_deadline_set_64(thread, deadline)
+#define sys_port_track_k_thread_deadline_set_64(thread, deadline)
+
 #define sys_port_track_k_work_delayable_init(dwork)
 #define sys_port_track_k_work_queue_init(queue)
 #define sys_port_track_k_work_init(work)
@@ -146,10 +145,7 @@ void sys_track_socket_init(int sock, int family, int type, int proto);
 #define sys_port_track_k_thread_wakeup(thread)
 #define sys_port_track_k_thread_sched_priority_set(thread, prio)
 #define sys_port_track_k_thread_sched_prio_deadline_set(thread, deadline)
-#define sys_port_track_k_thread_sched_prio_absolute_deadline_set(thread, deadline)
-#define sys_port_track_k_thread_sched_prio_deadline_set_64(thread, deadline)
-#define sys_port_track_k_thread_sched_prio_absolute_deadline_set_64(thread, deadline)
-
+#define sys_port_track_k_thread_deadline_set_64(thread, deadline)
 #define sys_port_track_k_work_delayable_init(dwork)
 #define sys_port_track_k_work_queue_init(queue)
 #define sys_port_track_k_work_init(work)

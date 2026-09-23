@@ -3383,9 +3383,8 @@ event {
 };
 
 
-
 event {
-	name = thread_deadline_set;
+	name = thread_deadline_set_64;
 	id = 0x186;
 	fields := struct {
 		uint32_t thread_id;
@@ -3395,76 +3394,15 @@ event {
 
 };
 
+
 event {
-	name = thread_absolute_deadline_set;
+	name = thread_sched_prio_deadline_set;
 	id = 0x187;
 	fields := struct {
 		uint32_t thread_id;
 		ctf_bounded_string_t name[20];
 		int64_t deadline;
-	};
-
-};
-
-event {
-	name = thread_sched_prio_deadline_set;
-	id = 0x188;
-	fields := struct {
-		uint32_t thread_id;
-		int64_t deadline;
-		ctf_bounded_string_t name[20];
+		
 	};
 };
 
-event {
-	name = thread_sched_prio_absolute_deadline_set;
-	id = 0x189;
-	fields := struct {
-		uint32_t thread_id;
-		int64_t deadline;
-		ctf_bounded_string_t name[20];
-	};
-};
-
-
-event {
-	name = thread_deadline_set_64;
-	id = 0x18A;
-	fields := struct {
-		uint32_t thread_id;
-		ctf_bounded_string_t name[20];
-		int64_t deadline;
-	};
-
-};
-
-event {
-	name = thread_absolute_deadline_set_64;
-	id = 0x18B;
-	fields := struct {
-		uint32_t thread_id;
-		ctf_bounded_string_t name[20];
-		int64_t deadline;
-	};
-
-};
-
-event {
-	name = thread_sched_prio_deadline_set_64;
-	id = 0x18C;
-	fields := struct {
-		uint32_t thread_id;
-		int64_t deadline;
-		ctf_bounded_string_t name[20];
-	};
-};
-
-event {
-	name = thread_sched_prio_absolute_deadline_set_64;
-	id = 0x18D;
-	fields := struct {
-		uint32_t thread_id;
-		int64_t deadline;
-		ctf_bounded_string_t name[20];
-	};
-};

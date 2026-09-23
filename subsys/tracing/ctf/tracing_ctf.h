@@ -72,32 +72,12 @@ extern "C" {
 #define sys_port_trace_k_thread_sched_abort(thread)  sys_trace_k_thread_sched_abort(thread)
 #define sys_port_trace_k_thread_sched_priority_set(thread, prio)                                   \
 	sys_trace_k_thread_sched_priority_set(thread, prio)
-
-
-#define sys_port_trace_k_thread_deadline_set(thread, deadline)                                   \
-	sys_trace_k_thread_deadline_set(thread, deadline)	
-
-#define sys_port_trace_k_thread_absolute_deadline_set(thread, deadline)                                   \
-	sys_trace_k_thread_absolute_deadline_set(thread, deadline)	
-
+			
 #define sys_port_trace_k_thread_sched_prio_deadline_set(thread, deadline)                                   \
 	sys_trace_k_thread_sched_prio_deadline_set(thread, deadline)	
 
-#define sys_port_trace_k_thread_sched_prio_absolute_deadline_set(thread, deadline)                                   \
-	sys_trace_k_thread_sched_prio_absolute_deadline_set(thread, deadline)	
-			
 #define sys_port_trace_k_thread_deadline_set_64(thread, deadline)                                   \
 	sys_trace_k_thread_deadline_set_64(thread, deadline)	
-
-#define sys_port_trace_k_thread_absolute_deadline_set_64(thread, deadline)                                   \
-	sys_trace_k_thread_absolute_deadline_set_64(thread, deadline)	
-
-#define sys_port_trace_k_thread_sched_prio_deadline_set_64(thread, deadline)                                   \
-	sys_trace_k_thread_sched_prio_deadline_set_64(thread, deadline)	
-
-#define sys_port_trace_k_thread_sched_prio_absolute_deadline_set_64(thread, deadline)                                   \
-	sys_trace_k_thread_sched_prio_absolute_deadline_set_64(thread, deadline)
-
 
 
 #define sys_port_trace_k_thread_sched_ready(thread) sys_trace_k_thread_sched_ready(thread)
@@ -350,9 +330,6 @@ void sys_trace_k_thread_abort(struct k_thread *thread);
 void sys_trace_k_thread_start(struct k_thread *thread);
 void sys_trace_k_thread_priority_set(struct k_thread *thread);
 
-void sys_trace_k_thread_absolute_deadline_set(struct k_thread *thread, int64_t deadline);
-void sys_trace_k_thread_deadline_set(struct k_thread *thread, int64_t deadline);
-void sys_trace_k_thread_absolute_deadline_set_64(struct k_thread *thread, int64_t deadline);
 void sys_trace_k_thread_deadline_set_64(struct k_thread *thread, int64_t deadline);
 
 void sys_trace_k_thread_suspend(struct k_thread *thread);
@@ -373,10 +350,6 @@ void sys_trace_k_thread_sched_abort(struct k_thread *thread);
 void sys_trace_k_thread_sched_priority_set(struct k_thread *thread, int prio);
 
 void sys_trace_k_thread_sched_prio_deadline_set(struct k_thread *thread, int64_t deadline);
-void sys_trace_k_thread_sched_prio_absolute_deadline_set(struct k_thread *thread, int64_t deadline);
-
-void sys_trace_k_thread_sched_prio_deadline_set_64(struct k_thread *thread, int64_t deadline);
-void sys_trace_k_thread_sched_prio_absolute_deadline_set_64(struct k_thread *thread, int64_t deadline);
 
 void sys_trace_k_thread_sched_ready(struct k_thread *thread);
 void sys_trace_k_thread_sched_pend(struct k_thread *thread);

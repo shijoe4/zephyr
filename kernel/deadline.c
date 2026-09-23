@@ -38,7 +38,7 @@
  * @param deadline New absolute deadline value (raw cycle counter).
  */
 
-void z_sched_prio_deadline_set_64(struct k_thread *thread, int64_t deadline)
+void z_sched_prio_deadline_set(struct k_thread *thread, int64_t deadline)
 {
 	Z_SCHED_SPINLOCK {
 		if (z_is_thread_queued(thread)) {
@@ -49,6 +49,8 @@ void z_sched_prio_deadline_set_64(struct k_thread *thread, int64_t deadline)
 			thread->base.prio_deadline = deadline;
 		}
 	}
+
+	SYS_PORT_TRACING_OBJ_FUNC(k_thread, sched_prio_deadline_set, thread, deadline);
 }
 
 
@@ -63,14 +65,17 @@ void z_impl_k_thread_absolute_deadline_set_64(k_tid_t tid, int64_t deadline)
 	 * z_sched_prio_deadline_set() which performs it under the
 	 * scheduler spinlock.
 	 */
-	z_sched_prio_deadline_set_64(thread, deadline);
+	z_sched_prio_deadline_set(thread, deadline);
 }
 	
 void z_impl_k_thread_deadline_set_64(k_tid_t tid, int64_t deadline)
 {
+	SYS_PORT_TRACING_OBJ_FUNC(k_thread, deadline_set_64, tid, deadline);
 	deadline = clamp(deadline, 0, INT64_MAX);
 	int64_t newdl = k_cycle_get_64() + deadline;
 	z_impl_k_thread_absolute_deadline_set_64(tid, newdl);
+
+
 }
 
 /*
@@ -79,7 +84,7 @@ void z_impl_k_thread_deadline_set_64(k_tid_t tid, int64_t deadline)
 void z_impl_k_thread_absolute_deadline_set(k_tid_t tid, int deadline)
 {
 	struct k_thread *thread = tid;
-	z_sched_prio_deadline_set_64(thread, (int64_t)deadline);
+	z_sched_prio_deadline_set(thread, (int64_t)deadline);
 }
 
 void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
@@ -87,10 +92,6 @@ void z_impl_k_thread_deadline_set(k_tid_t tid, int deadline)
 	 z_impl_k_thread_deadline_set_64(tid, (int64_t)deadline);
 }
 
-void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
-{
-	z_sched_prio_deadline_set_64(thread, (int64_t)deadline);
-}
 
 
 #ifdef CONFIG_USERSPACE

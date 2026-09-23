@@ -24,6 +24,7 @@ void sys_trace_thread_switched_in_user(void);
 void sys_trace_thread_switched_out_user(void);
 void sys_trace_thread_info_user(struct k_thread *thread);
 void sys_trace_thread_priority_set_user(struct k_thread *thread, int prio);
+void sys_trace_thread_deadline_set_64_user(struct k_thread *thread, int64_t deadline);
 void sys_trace_thread_sched_ready_user(struct k_thread *thread);
 void sys_trace_thread_pend_user(struct k_thread *thread);
 void sys_trace_isr_enter_user(void);
@@ -44,6 +45,7 @@ void sys_trace_k_thread_switched_in(void);
 void sys_trace_k_thread_switched_out(void);
 void sys_trace_thread_info(struct k_thread *thread);
 void sys_trace_thread_sched_priority_set(struct k_thread *thread, int prio);
+void sys_trace_thread_sched_prio_deadline_set(struct k_thread *thread, int64_t deadline);
 void sys_trace_thread_sched_ready(struct k_thread *thread);
 void sys_trace_thread_pend(struct k_thread *thread);
 void sys_trace_isr_enter(void);
@@ -151,6 +153,8 @@ void sys_trace_rtio_chain_next_exit(const struct rtio *r, const struct rtio_iode
 	sys_trace_thread_sched_priority_set(thread, prio)
 #define sys_port_trace_k_thread_sched_ready(thread) sys_trace_thread_sched_ready(thread)
 #define sys_port_trace_k_thread_sched_pend(thread) sys_trace_thread_pend(thread)
+#define sys_port_trace_k_thread_sched_prio_deadline_set(thread, deadline) \
+	sys_trace_thread_sched_prio_deadline_set(thread, deadline)
 
 #define sys_port_trace_k_timer_init(timer)					\
 					sys_trace_timer_init(timer)
