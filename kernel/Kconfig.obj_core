@@ -60,6 +60,12 @@ config OBJ_CORE_MUTEX
 	help
 	  When enabled, this option integrates mutexes into the object core
 	  framework.
+config OBJ_CORE_MUTEX_CEILING_FLOOR
+	bool "Integrate mutexes into object core framework"
+	default y
+	help
+	  When enabled, this option integrates mutexes into the object core
+	  framework.
 
 config OBJ_CORE_MSGQ
 	bool "Integrate message queues into object core framework"

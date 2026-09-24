@@ -22,6 +22,9 @@ struct k_spinlock _track_list_k_sem_lock;
 struct k_mutex *_track_list_k_mutex;
 struct k_spinlock _track_list_k_mutex_lock;
 
+struct k_mutex_ceiling_floor *_track_list_k_mutex_ceiling_floor;
+struct k_spinlock _track_list_k_mutex_ceiling_floor_lock;
+
 struct k_stack *_track_list_k_stack;
 struct k_spinlock _track_list_k_stack_lock;
 
@@ -95,6 +98,12 @@ void sys_track_k_mutex_init(struct k_mutex *mutex)
 			SYS_TRACK_LIST_PREPEND(_track_list_k_mutex, mutex));
 }
 
+void sys_track_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor,int ceiling, int64_t floor)
+{
+	SYS_PORT_TRACING_TYPE_MASK(k_mutex_ceiling_floor,
+			SYS_TRACK_LIST_PREPEND(_track_list_k_mutex_ceiling_floor, mutex_ceiling_floor));
+}
+
 void sys_track_k_stack_init(struct k_stack *stack)
 {
 	SYS_PORT_TRACING_TYPE_MASK(k_stack,
@@ -160,6 +169,9 @@ static int sys_track_static_init(void)
 
 	SYS_PORT_TRACING_TYPE_MASK(k_mutex,
 			SYS_TRACK_STATIC_INIT(k_mutex, 0));
+
+	SYS_PORT_TRACING_TYPE_MASK(k_mutex_ceiling_floor,
+			SYS_TRACK_STATIC_INIT(k_mutex_ceiling_floor, 0,0,0));
 
 	SYS_PORT_TRACING_TYPE_MASK(k_stack,
 			SYS_TRACK_STATIC_INIT(k_stack));

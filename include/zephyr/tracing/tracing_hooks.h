@@ -1031,6 +1031,68 @@
 
 /** @} */ /* end of subsys_tracing_apis_mutex */
 
+
+
+/**
+ * @brief Trace initialization of Mutex ceiling floor
+ * @param mutex_ceiling_floor Mutex object
+ * @param ceiling Ceiling value
+ * @param floor Floor value
+ * @param ret Return value
+ */
+#ifndef sys_port_trace_k_mutex_ceiling_floor_init
+#define sys_port_trace_k_mutex_ceiling_floor_init(mutex_ceiling_floor, ceiling, floor, ret)
+#endif
+
+/**
+ * @brief Trace Mutex lock attempt start
+ * @param mutex Mutex object
+ * @param timeout Timeout period
+ */
+#ifndef sys_port_trace_k_mutex_ceiling_floor_lock_enter
+#define sys_port_trace_k_mutex_ceiling_floor_lock_enter(mutex_ceiling_floor, timeout)
+#endif
+
+/**
+ * @brief Trace Mutex lock attempt blocking
+ * @param mutex Mutex object
+ * @param timeout Timeout period
+ */
+#ifndef sys_port_trace_k_mutex_ceiling_floor_lock_blocking
+#define sys_port_trace_k_mutex_ceiling_floor_lock_blocking(mutex_ceiling_floor, timeout)
+#endif
+
+/**
+ * @brief Trace Mutex lock attempt outcome
+ * @param mutex Mutex object
+ * @param timeout Timeout period
+ * @param ret Return value
+ */
+#ifndef sys_port_trace_k_mutex_ceiling_floor_lock_exit
+#define sys_port_trace_k_mutex_ceiling_floor_lock_exit(mutex_ceiling_floor, timeout, ret)
+#endif
+
+/**
+ * @brief Trace Mutex unlock entry
+ * @param mutex Mutex object
+ */
+#ifndef sys_port_trace_k_mutex_ceiling_floor_unlock_enter
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_enter(mutex_ceiling_floor)
+#endif
+
+/**
+ * @brief Trace Mutex unlock exit
+ */
+#ifndef sys_port_trace_k_mutex_ceiling_floor_unlock_exit
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_exit(mutex_ceiling_floor, ret)
+#endif
+
+/** @} */ /* end of subsys_tracing_apis_mutex_ceiling_floor */
+
+
+
+
+
 /**
  * @brief Tracing hooks for conditional variable events
  * @defgroup subsys_tracing_apis_condvar Conditional variable

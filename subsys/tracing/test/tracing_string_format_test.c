@@ -311,6 +311,46 @@ void sys_trace_k_thread_sched_set_priority(struct k_thread *thread, int prio)
 	TRACING_STRING("%s: %p, priority: %d\n", __func__, thread, prio);
 }
 
+
+
+
+
+void sys_trace_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ceiling, int64_t floor, int ret)
+{
+	TRACING_STRING("%s: %p, ceiling: %d, floor: %ld, returns %d\n", __func__, mutex_ceiling_floor, ceiling, floor, ret);
+}
+
+void sys_trace_k_mutex_ceiling_floor_lock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout)
+{
+	TRACING_STRING("%s: %p, timeout: %u\n", __func__, mutex_ceiling_floor, (uint32_t)timeout.ticks);
+}
+
+void sys_trace_k_mutex_ceiling_floor_lock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout, int ret)
+{
+	TRACING_STRING("%s: %p, timeout: %u, returns: %d\n", __func__, mutex_ceiling_floor,
+		       (uint32_t)timeout.ticks, ret);
+}
+
+void sys_trace_k_mutex_ceiling_floor_lock_blocking(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout)
+{
+	TRACING_STRING("%s: %p, timeout: %u\n", __func__, mutex_ceiling_floor, (uint32_t)timeout.ticks);
+}
+
+void sys_trace_k_mutex_ceiling_floor_unlock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor)
+{
+	TRACING_STRING("%s: %p\n", __func__, mutex_ceiling_floor);
+}
+
+
+void sys_trace_k_mutex_ceiling_floor_unlock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ret)
+{
+	TRACING_STRING("%s: %p, return: %d\n", __func__, mutex_ceiling_floor, ret);
+}
+
+
+
+
+
 void sys_trace_k_timer_start(struct k_timer *timer, k_timeout_t duration,
 			     k_timeout_t period)
 {

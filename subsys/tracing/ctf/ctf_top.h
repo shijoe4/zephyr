@@ -500,6 +500,15 @@ typedef enum {
 	CTF_EVENT_THREAD_SCHED_PRIO_DEADLINE_SET = 0x187,
 
 
+  	CTF_EVENT_MUTEX_CEILING_FLOOR_INIT = 0x188,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_ENTER = 0x189,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_BLOCKING = 0x18A,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_EXIT = 0x18B,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_ENTER = 0x18C,
+	CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_EXIT = 0x18D,
+
+
+
 } ctf_event_t;
 
 typedef struct {
@@ -1244,6 +1253,42 @@ static inline void ctf_top_mutex_unlock_exit(uint32_t mutex_id, int32_t ret)
 {
 	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_UNLOCK_EXIT), mutex_id, ret);
 }
+
+
+
+
+/* Mutex Ceiling Floor */
+static inline void ctf_top_mutex_ceiling_floor_init(uint32_t mutex_id, int ceiling, int64_t floor, int32_t ret)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_INIT), mutex_id, ceiling, floor, ret);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_lock_enter(uint32_t mutex_id, uint32_t timeout)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_ENTER), mutex_id, timeout);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_lock_blocking(uint32_t mutex_id, uint32_t timeout)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_BLOCKING), mutex_id, timeout);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_lock_exit(uint32_t mutex_id, uint32_t timeout, int32_t ret)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_LOCK_EXIT), mutex_id, timeout, ret);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_unlock_enter(uint32_t mutex_id)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_ENTER), mutex_id);
+}
+
+static inline void ctf_top_mutex_ceiling_floor_unlock_exit(uint32_t mutex_id, int32_t ret)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_MUTEX_CEILING_FLOOR_UNLOCK_EXIT), mutex_id, ret);
+}
+
+
 
 /* Timer */
 static inline void ctf_top_timer_init(uint32_t timer)

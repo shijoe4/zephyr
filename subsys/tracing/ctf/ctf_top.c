@@ -916,6 +916,47 @@ void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret)
 	ctf_top_mutex_unlock_exit((uint32_t)(uintptr_t)mutex, (int32_t)ret);
 }
 
+
+
+/* Mutex ceiling floor */
+
+void sys_trace_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ceiling, int64_t floor, int ret)
+{
+	ctf_top_mutex_ceiling_floor_init((uint32_t)(uintptr_t)mutex_ceiling_floor, (int)ceiling,(int64_t)floor, (int32_t)ret);
+}
+
+void sys_trace_k_mutex_ceiling_floor_lock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout)
+{
+	ctf_top_mutex_ceiling_floor_lock_enter((uint32_t)(uintptr_t)mutex_ceiling_floor,
+				 k_ticks_to_us_floor32((uint32_t)timeout.ticks));
+}
+
+void sys_trace_k_mutex_ceiling_floor_lock_blocking(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout)
+{
+	ctf_top_mutex_ceiling_floor_lock_blocking((uint32_t)(uintptr_t)mutex_ceiling_floor,
+					    k_ticks_to_us_floor32((uint32_t)timeout.ticks));
+}
+
+void sys_trace_k_mutex_ceiling_floor_lock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout, int ret)
+{
+	ctf_top_mutex_ceiling_floor_lock_exit((uint32_t)(uintptr_t)mutex_ceiling_floor,
+					       k_ticks_to_us_floor32((uint32_t)timeout.ticks), (int32_t)ret);
+}
+
+void sys_trace_k_mutex_ceiling_floor_unlock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor)
+{
+	ctf_top_mutex_ceiling_floor_unlock_enter((uint32_t)(uintptr_t)mutex_ceiling_floor);
+}
+
+void sys_trace_k_mutex_ceiling_floor_unlock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ret)
+{
+	ctf_top_mutex_ceiling_floor_unlock_exit((uint32_t)(uintptr_t)mutex_ceiling_floor, (int32_t)ret);
+}
+
+
+
+
+
 /* Timer */
 void sys_trace_k_timer_init(struct k_timer *timer)
 {

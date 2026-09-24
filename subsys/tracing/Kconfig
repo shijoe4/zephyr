@@ -326,6 +326,12 @@ config TRACING_MUTEX
 	help
 	  Enable tracing Mutexes.
 
+config TRACING_MUTEX_CEILING_FLOOR
+	bool "Tracing Mutexes mutex_ceiling_floor"
+	default y
+	help
+	  Enable tracing Mutexes for mutex_ceiling_floor.	  
+
 config TRACING_CONDVAR
 	bool "Tracing Condition Variables"
 	default y

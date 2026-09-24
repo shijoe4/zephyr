@@ -77,6 +77,18 @@
 #define sys_port_trace_k_mutex_unlock_enter(mutex) sys_trace_k_mutex_unlock_enter(mutex)
 #define sys_port_trace_k_mutex_unlock_exit(mutex, ret) sys_trace_k_mutex_unlock_exit(mutex, ret)
 
+#define sys_port_trace_k_mutex_ceiling_floor_init(mutex_ceiling_floor, ceiling, floor, ret)             \
+	sys_trace_k_mutex_ceiling_floor_init(mutex_ceiling_floor, ceiling, floor, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_enter(mutex_ceiling_floor, timeout)                                          \
+	sys_trace_k_mutex_ceiling_floor_lock_enter(mutex_ceiling_floor, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_blocking(mutex_ceiling_floor, timeout)                                       \
+	sys_trace_k_mutex_ceiling_floor_lock_blocking(mutex_ceiling_floor, timeout)
+#define sys_port_trace_k_mutex_ceiling_floor_lock_exit(mutex_ceiling_floor, timeout, ret)                                      \
+	sys_trace_k_mutex_ceiling_floor_lock_exit(mutex_ceiling_floor, timeout, ret)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_enter(mutex_ceiling_floor) sys_trace_k_mutex_ceiling_floor_unlock_enter(mutex_ceiling_floor)
+#define sys_port_trace_k_mutex_ceiling_floor_unlock_exit(mutex_ceiling_floor, ret) sys_trace_k_mutex_ceiling_floor_unlock_exit(mutex_ceiling_floor, ret)
+
+
 #define sys_port_trace_k_condvar_init(condvar, ret) sys_trace_k_condvar_init(condvar, ret)
 #define sys_port_trace_k_condvar_signal_enter(condvar) sys_trace_k_condvar_signal_enter(condvar)
 #define sys_port_trace_k_condvar_signal_blocking(condvar, timeout)                                 \
@@ -442,6 +454,14 @@ void sys_trace_k_mutex_lock_blocking(struct k_mutex *mutex, k_timeout_t timeout)
 void sys_trace_k_mutex_lock_exit(struct k_mutex *mutex, k_timeout_t timeout, int ret);
 void sys_trace_k_mutex_unlock_enter(struct k_mutex *mutex);
 void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret);
+
+
+void sys_trace_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ceiling, int64_t floor, int ret);
+void sys_trace_k_mutex_ceiling_floor_lock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout);
+void sys_trace_k_mutex_ceiling_floor_lock_blocking(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout);
+void sys_trace_k_mutex_ceiling_floor_lock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout, int ret);
+void sys_trace_k_mutex_ceiling_floor_unlock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor);
+void sys_trace_k_mutex_ceiling_floor_unlock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ret);
 
 void sys_trace_k_condvar_init(struct k_condvar *condvar, int ret);
 void sys_trace_k_condvar_signal_enter(struct k_condvar *condvar);

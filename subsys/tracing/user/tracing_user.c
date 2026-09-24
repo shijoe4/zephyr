@@ -865,6 +865,42 @@ void sys_trace_k_mutex_unlock_exit(struct k_mutex *mutex, int ret)
 	sys_trace_k_mutex_unlock_exit_user(mutex, ret);
 }
 
+
+
+/* k_mutex ceiling floor */
+void __weak sys_trace_k_mutex_ceiling_floor_init_user(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ceiling, int64_t floor, int ret) {}
+void sys_trace_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int32_t ceiling, int64_t floor, int ret)
+{
+	sys_trace_k_mutex_ceiling_floor_init_user(mutex_ceiling_floor, ceiling, floor, ret);
+}
+void __weak sys_trace_k_mutex_ceiling_floor_lock_blocking_user(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout) {}
+void sys_trace_k_mutex_ceiling_floor_lock_blocking(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout)
+{
+	sys_trace_k_mutex_ceiling_floor_lock_blocking_user(mutex_ceiling_floor, timeout);
+}
+void __weak sys_trace_k_mutex_ceiling_floor_lock_enter_user(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout) {}
+void sys_trace_k_mutex_ceiling_floor_lock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout)
+{
+	sys_trace_k_mutex_ceiling_floor_lock_enter_user(mutex_ceiling_floor, timeout);
+}
+void __weak sys_trace_k_mutex_ceiling_floor_lock_exit_user(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout, int ret) {}
+void sys_trace_k_mutex_ceiling_floor_lock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout, int ret)
+{
+	sys_trace_k_mutex_ceiling_floor_lock_exit_user(mutex_ceiling_floor, timeout, ret);
+}
+void __weak sys_trace_k_mutex_ceiling_floor_unlock_enter_user(struct k_mutex_ceiling_floor *mutex_ceiling_floor) {}
+void sys_trace_k_mutex_ceiling_floor_unlock_enter(struct k_mutex_ceiling_floor *mutex_ceiling_floor)
+{
+	sys_trace_k_mutex_ceiling_floor_unlock_enter_user(mutex_ceiling_floor);
+}
+void __weak sys_trace_k_mutex_ceiling_floor_unlock_exit_user(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ret) {}
+void sys_trace_k_mutex_ceiling_floor_unlock_exit(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int ret)
+{
+	sys_trace_k_mutex_ceiling_floor_unlock_exit_user(mutex_ceiling_floor, ret);
+}
+
+
+
 /* k_poll */
 void __weak sys_trace_k_poll_api_event_init_user(struct k_poll_event *event) {}
 void sys_trace_k_poll_api_event_init(struct k_poll_event *event)

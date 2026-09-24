@@ -3623,7 +3623,7 @@ struct k_mutex_ceiling_floor {
 
 	SYS_PORT_TRACING_TRACKING_FIELD(k_mutex_ceiling_floor);
 
-#ifdef CONFIG_OBJ_CORE_MUTEX
+#ifdef CONFIG_OBJ_CORE_MUTEX_CEILING_FLOOR
 	struct k_obj_core obj_core;
 #endif
 
@@ -3631,18 +3631,18 @@ struct k_mutex_ceiling_floor {
 };
 
 
-__syscall int k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling, int64_t resource_floor);
+__syscall int k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int resource_ceiling, int64_t resource_floor);
 
-__syscall int k_mutex_ceiling_floor_lock(struct k_mutex_ceiling_floor *mutex, k_timeout_t timeout);
+__syscall int k_mutex_ceiling_floor_lock(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout);
 
-__syscall int k_mutex_ceiling_floor_unlock(struct k_mutex_ceiling_floor *mutex);
+__syscall int k_mutex_ceiling_floor_unlock(struct k_mutex_ceiling_floor *mutex_ceiling_floor);
 
 
-__syscall int k_mutex_ceiling_init(struct k_mutex_ceiling_floor *mutex, int resource_ceiling);
+__syscall int k_mutex_ceiling_init(struct k_mutex_ceiling_floor *mutex_ceiling_floor, int resource_ceiling);
 
-__syscall int k_mutex_ceiling_lock(struct k_mutex_ceiling_floor *mutex, k_timeout_t timeout);
+__syscall int k_mutex_ceiling_lock(struct k_mutex_ceiling_floor *mutex_ceiling_floor, k_timeout_t timeout);
 
-__syscall int k_mutex_ceiling_unlock(struct k_mutex_ceiling_floor *mutex);
+__syscall int k_mutex_ceiling_unlock(struct k_mutex_ceiling_floor *mutex_ceiling_floor);
 
 
 
