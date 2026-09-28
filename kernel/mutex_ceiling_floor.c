@@ -20,11 +20,12 @@
 #include <zephyr/sys/check.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/llext/symbol.h>
+#include <zephyr/sys/dlist.h>
 
 #define MAX_ITEMS 100
 
 //LOG_LEVEL_DBG
-LOG_MODULE_DECLARE(os, LOG_LEVEL_DBG);
+LOG_MODULE_DECLARE(os, 	LOG_LEVEL_NONE);
 
 static struct k_spinlock lock;
 
@@ -54,29 +55,18 @@ struct ceiling_floor_mutex_owner{
     #ifdef CONFIG_SCHED_DEADLINE
     int64_t floor_prio;        /* floor priority of the mutex */
     #endif
+
+   sys_dnode_t node ;  
 };
 
+/* Define the capacity of the memory slab */
+#define ITEM_COUNT 10
 
-struct ceiling_floor_mutex_owner mutex_ceiling_owners;
+/* Static memory slab to manage stack items safely */
+K_MEM_SLAB_DEFINE(stack_slab, sizeof(struct ceiling_floor_mutex_owner), ITEM_COUNT, 4);
 
-/**
- * @brief Global synchronization stack for tracking active mutex ownership.
- *
- * This system-wide stack preserves the execution states of threads during nested 
- * or multi-resource lock acquisitions under the Immediate Priority Ceiling Protocol (IPCP). 
- * Metadata is pushed onto this stack during a lock operation and popped during an unlock.
- *
- * @note Architecture & DataType Assumptions:
- * - **Thread ID (tid):** 32-bit identifier.
- * - **Ceiling Priority:** 32-bit unsigned integer. (int type casted to fit into stack data type)
- * - **Floor Priority:** 64-bit unsigned integer (type casted in64_t to fit into stack data type)
- * 
- */
-#ifdef CONFIG_SCHED_DEADLINE
-K_STACK_DEFINE(stack_array, MAX_ITEMS*4);
-#else
-K_STACK_DEFINE(stack_array, MAX_ITEMS*2);
-#endif
+/* Stack head (Assumes external global synchronization protects list modifications) */
+static sys_dlist_t ceiling_floor_stack = SYS_DLIST_STATIC_INIT(&ceiling_floor_stack);
 
 
 /**
@@ -90,101 +80,117 @@ K_STACK_DEFINE(stack_array, MAX_ITEMS*2);
 
 _wait_q_t wait_q_mutex_ceiling_floor;
 
+
+
 /**
- * @brief Pushes the current mutex owner information onto the stack prior to locking.
+ * @brief Pushes a mutex owner record onto the global stack.
  *
- * Saves the current ownership and priority state by pushing the relevant information
- * onto the synchronization stack before the new lock is established.
+ * This function is responsible for adding a new mutex ownership record to the 
+ * global stack, which tracks the current system ceiling and floor priorities. 
+ * It is assumed that external synchronization (e.g., spinlock) protects this call.
  *
- * @param[in] owner Pointer to the structure containing the owner information 
- * to be preserved on the stack.
- *
- * @return true  If the information was successfully pushed onto the stack.
- * @return false If the stack is full or the operation failed.
+ * @param[in] input_item Pointer to the mutex owner data to be pushed.
+ * @return true if the push operation was successful, false otherwise.
  */
 
-
-bool push_mutex_owner(struct ceiling_floor_mutex_owner owner)
-{
-    stack_data_t data;
-    data = (stack_data_t)owner.ceiling_prio;
-    if(k_stack_push(&stack_array, data)==-ENOMEM)
-    {
-
-        return false;
-    }
-    #ifdef CONFIG_SCHED_DEADLINE
-
-   uint32_t lower_4byte =(uint32_t)(owner.floor_prio); 
-
-   uint32_t upper_4byte =(uint32_t)((owner.floor_prio>>32));
-
-    data = (stack_data_t)lower_4byte;
-    if(k_stack_push(&stack_array, data)==-ENOMEM)
-    {
-        return false;
-    }
-    data = (stack_data_t)upper_4byte;
-    if(k_stack_push(&stack_array, data)==-ENOMEM)
-    {
-        return false;
-    }
-    #endif
-
-    data = (stack_data_t)owner.owner;
-    if(k_stack_push(&stack_array, data)==-ENOMEM)
-    {
-        return false;
+int ceiling_floor_stack_push(const struct ceiling_floor_mutex_owner *input_item) {
+    if (input_item == NULL) {
+        return -EINVAL;
     }
 
+    struct ceiling_floor_mutex_owner *item;
 
-    return true;
+    /* Allocate block from memory slab */
+    if (k_mem_slab_alloc(&stack_slab, (void **)&item, K_NO_WAIT) != 0) {
+        return -ENOMEM; // Slab is full
+    }
+
+    /* Copy data fields into the slab-allocated block */
+    item->owner = input_item->owner;
+    item->ceiling_prio = input_item->ceiling_prio;
+#ifdef CONFIG_SCHED_DEADLINE
+    item->floor_prio = input_item->floor_prio;
+#endif
+
+    /* Prepend to the intrusive list */
+    sys_dlist_prepend(&ceiling_floor_stack, &item->node);
+
+    return 0;
+}
+
+
+/**
+ * @brief Peeks at the top mutex owner record on the global stack without removing it.
+ *
+ * This function retrieves the current system ceiling and floor priorities by 
+ * inspecting the top item of the global stack. It does not modify the stack state.
+ *
+ * @param[out] out_item Pointer to a structure where the top item's data will be copied.
+ * @return 0 on success, -EINVAL if out_item is NULL, -ENOENT if the stack is empty.
+ */
+
+int ceiling_floor_stack_peek(struct ceiling_floor_mutex_owner *out_item) {
+    if (out_item == NULL) {
+        return -EINVAL;
+    }
+
+    /* Fixed: Use sys_dnode_t * instead of struct sys_dnode * */
+    sys_dnode_t *head = sys_dlist_peek_head(&ceiling_floor_stack);
+    if (!head) {
+        return -ENOENT; // Stack is empty
+    }
+
+    struct ceiling_floor_mutex_owner *item = CONTAINER_OF(head, struct ceiling_floor_mutex_owner, node);
+
+    /* Copy data out without removing */
+    out_item->owner = item->owner;
+    out_item->ceiling_prio = item->ceiling_prio;
+#ifdef CONFIG_SCHED_DEADLINE
+    out_item->floor_prio = item->floor_prio;
+#endif
+
+    return 0;
 }
 
 /**
- * @brief Pops the previous mutex owner information from the stack upon unlocking.
+ * @brief Pops the top mutex owner record from the global stack and frees its memory.
  *
- * Restores the prior ownership and priority state by popping the top element 
- * off the synchronization stack and writing it to the provided variable.
+ * This function removes the top item from the global stack, copies its data to 
+ * the provided output structure, and returns the memory block back to the slab. 
+ * It is assumed that external synchronization protects this call.
  *
- * @param[out] owner Pointer to a structure where the popped owner information 
- * will be stored.
- *
- * @return true  If the information was successfully popped from the stack.
- * @return false If the stack is empty or the operation failed.
+ * @param[out] out_item Pointer to a structure where the popped item's data will be copied.
+ *                     Can be NULL if the caller does not need the data.
+ * @return 0 on success, -ENOENT if the stack is empty.
  */
 
-bool pop_mutex_owner(struct ceiling_floor_mutex_owner *owner)
-{
-    stack_data_t data;
-    if(k_stack_pop(&stack_array, &data, K_FOREVER)==-ENOMEM)
-    {
-        return false;
-    }
-    owner->owner = (struct k_thread *)data;
-    
-    #ifdef CONFIG_SCHED_DEADLINE
-    if(k_stack_pop(&stack_array, &data, K_FOREVER)==-ENOMEM)
-    {
-        return false;
-    }
-    int64_t upper_4byte = (int64_t)data;
-    if(k_stack_pop(&stack_array, &data, K_FOREVER)==-ENOMEM)
-    {
-        return false;
-    }
-    int64_t lower_4byte = (int64_t)data;
-  owner->floor_prio = (upper_4byte << 32) | (lower_4byte & 0xFFFFFFFFULL);
-    #endif
 
-    if(k_stack_pop(&stack_array, &data, K_FOREVER)==-ENOMEM)
-    {
-        return false;
-    }  
-    owner->ceiling_prio = (int)data;
-    
-    return true;
+int ceiling_floor_stack_pop(struct ceiling_floor_mutex_owner *out_item) {
+    /* Fixed: Use sys_dnode_t * instead of struct sys_dnode * */
+    sys_dnode_t *node = sys_dlist_get(&ceiling_floor_stack);
+    if (!node) {
+        return -ENOENT; // Stack is empty
+    }
+
+    struct ceiling_floor_mutex_owner *item = CONTAINER_OF(node, struct ceiling_floor_mutex_owner, node);
+
+    /* Copy data out to caller's buffer */
+    if (out_item != NULL) {
+        out_item->owner = item->owner;
+        out_item->ceiling_prio = item->ceiling_prio;
+#ifdef CONFIG_SCHED_DEADLINE
+        out_item->floor_prio = item->floor_prio;
+#endif
+    }
+
+    /* Automatically return the memory block back to the slab */
+    k_mem_slab_free(&stack_slab, (void *)item);
+
+    return 0;
 }
+
+
+
 
 /**
  * @brief Initializes a Priority Ceiling/Floor mutex with specified resource limits.
@@ -219,17 +225,16 @@ int z_impl_k_mutex_ceiling_floor_init(struct k_mutex_ceiling_floor *mutex, int r
     if(stack_status==0)
     {
 
-     if(push_mutex_owner(current_mutex_owner))
-     {
-            atomic_set(&stack_init_flag, 1);
-        }
+   if(ceiling_floor_stack_push(&current_mutex_owner)==0)
+   {
+      atomic_set(&stack_init_flag, 1);
+   }
         else
         {
 LOG_ERR("Failed to initialize the stack for ceiling floor mutex");
             k_spin_unlock(&lock, key);
             return -ENOMEM;
      }
-
 
     }
 
@@ -308,20 +313,13 @@ __ASSERT(!arch_is_in_isr(), "mutexes cannot be used inside ISRs");
 LOG_DBG("Get the latest mutex owner information from stack\n");
 	 SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, lock, mutex,timeout);
 
-        if(!pop_mutex_owner(&current_mutex_owner))
-        {
-                   LOG_ERR("Failed to pop the mutex owner from stack\n");
-            k_spin_unlock(&lock, key);
-            return -ENOMEM;
-        }
 
-
-        if(!push_mutex_owner(current_mutex_owner))
-        {
-                 LOG_ERR("Failed to push the mutex owner to stack\n");
-            k_spin_unlock(&lock, key);
-            return -ENOMEM;
-        }
+   if(ceiling_floor_stack_peek(&current_mutex_owner)!=0)
+   {
+        LOG_ERR("Failed to peek the mutex owner from stack\n");
+    k_spin_unlock(&lock, key);
+    return -ENOMEM;
+   }
 
      #ifdef CONFIG_SCHED_DEADLINE
         LOG_DBG("current system ceiling %d, current owner of the lock %p, current stack floor %lld\n", current_mutex_owner.ceiling_prio, current_mutex_owner.owner, current_mutex_owner.floor_prio);
@@ -399,14 +397,15 @@ LOG_DBG("thread %s is trying to acquire mutex %p with ceiling %d and floor %lld 
             LOG_DBG("current cycle count %lld\n", k_cycle_get_64());
         current_mutex_owner.floor_prio =MIN(mutex->resource_floor+k_cycle_get_64(),_current->base.prio_deadline);
         #endif
-       if(!push_mutex_owner(current_mutex_owner))
-       {
-            LOG_ERR("Failed to push the mutex owner to stack\n");
+
+    if(ceiling_floor_stack_push(&current_mutex_owner)!=0)
+   {
+                LOG_ERR("Failed to push the mutex owner to stack\n");
             k_spin_unlock(&lock, key);
               return -ENOMEM;
-         }
+       }
 
-
+        
         mutex->owner = _current;
         mutex->lock_count=1U;
        result = z_thread_prio_set(_current, mutex->resource_ceiling);
@@ -512,7 +511,7 @@ SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, unlock, mutex);
             mutex->owner = NULL;
   
            
-       if(pop_mutex_owner(&current_mutex_owner))
+        if(ceiling_floor_stack_pop(&current_mutex_owner)==0)
        {
                 current_mutex_owner.owner = NULL;
                 current_mutex_owner.ceiling_prio = INT_MAX;
@@ -612,6 +611,11 @@ int z_impl_k_mutex_ceiling_unlock(struct k_mutex_ceiling_floor *mutex)
  return z_impl_k_mutex_ceiling_floor_unlock(mutex);
 
 }
+
+
+#ifdef CONFIG_OBJ_CORE_MUTEX_CEILING_FLOOR
+K_OBJ_TYPE_DEFINE(obj_type_mutex_ceiling_floor, k_mutex_ceiling_floor, K_OBJ_TYPE_MUTEX_CEILING_FLOOR_ID, NULL);
+#endif /* CONFIG_OBJ_CORE_MUTEX_CEILING_FLOOR */
 
 
 #endif /* CONFIG_SMP */
