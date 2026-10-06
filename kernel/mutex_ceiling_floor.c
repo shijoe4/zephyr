@@ -24,8 +24,13 @@
 
 #define MAX_ITEMS 100
 
-//LOG_LEVEL_DBG
-LOG_MODULE_DECLARE(os, 	LOG_LEVEL_NONE);
+bool reshedule_flag = false;
+bool reschedule_unlock_flag = false;
+
+int stack_size = 0;
+//LOG_LEVEL_NONE
+//
+LOG_MODULE_DECLARE(os, LOG_LEVEL_DBG);
 
 static struct k_spinlock lock;
 
@@ -36,6 +41,8 @@ static struct k_spinlock lock;
  * once, even when multiple ceiling/floor mutexes are instantiated concurrently 
  * or sequentially across the system.
  */
+
+ 
 
 
 atomic_t stack_init_flag = ATOMIC_INIT(0);
@@ -115,6 +122,7 @@ int ceiling_floor_stack_push(const struct ceiling_floor_mutex_owner *input_item)
     /* Prepend to the intrusive list */
     sys_dlist_prepend(&ceiling_floor_stack, &item->node);
 
+
     return 0;
 }
 
@@ -130,6 +138,8 @@ int ceiling_floor_stack_push(const struct ceiling_floor_mutex_owner *input_item)
  */
 
 int ceiling_floor_stack_peek(struct ceiling_floor_mutex_owner *out_item) {
+
+
     if (out_item == NULL) {
         return -EINVAL;
     }
@@ -185,6 +195,7 @@ int ceiling_floor_stack_pop(struct ceiling_floor_mutex_owner *out_item) {
 
     /* Automatically return the memory block back to the slab */
     k_mem_slab_free(&stack_slab, (void *)item);
+    
 
     return 0;
 }
@@ -298,8 +309,20 @@ int z_impl_k_mutex_ceiling_floor_lock(struct k_mutex_ceiling_floor *mutex, k_tim
 k_spinlock_key_t key;
 struct ceiling_floor_mutex_owner current_mutex_owner ;
 
+
 unpend_success: 
-key = k_spin_lock(&lock);
+
+
+    if(reshedule_flag || reschedule_unlock_flag)
+    {
+        LOG_DBG("rescheduling after initializing mutex %p\n", mutex);
+        k_reschedule();
+  reshedule_flag = false;
+  reschedule_unlock_flag = false;
+      
+    }
+
+ key = k_spin_lock(&lock);    
 
 LOG_DBG("entering lock mutex thread %s mutex %p\n", 	k_thread_name_get (k_current_get()), mutex);
     #ifdef CONFIG_SCHED_DEADLINE
@@ -384,7 +407,7 @@ LOG_DBG("thread %s is trying to acquire mutex %p with ceiling %d and floor %lld 
     {
         LOG_DBG("thread %s is acquiring mutex %p with ceiling %d and floor %lld\n", k_thread_name_get(k_current_get()), mutex, mutex->resource_ceiling, mutex->resource_floor);
         
-         bool result=false;
+        //  bool result=false;
         mutex->owner_orig_prio = _current->base.prio;
         #ifdef CONFIG_SCHED_DEADLINE
         mutex->owner_original_floor_prio = _current->base.prio_deadline;
@@ -405,26 +428,33 @@ LOG_DBG("thread %s is trying to acquire mutex %p with ceiling %d and floor %lld 
               return -ENOMEM;
        }
 
-        
         mutex->owner = _current;
         mutex->lock_count=1U;
-       result = z_thread_prio_set(_current, mutex->resource_ceiling);
+        if(mutex->resource_ceiling!=_current->base.prio)
+        {
+
+       reshedule_flag = z_thread_prio_set(_current, mutex->resource_ceiling);
+        }
        #ifdef CONFIG_SCHED_DEADLINE
-       k_thread_absolute_deadline_set_64(mutex->owner, current_mutex_owner.floor_prio);
+       if(current_mutex_owner.floor_prio!=_current->base.prio_deadline)
+       {
+          k_thread_absolute_deadline_set_64(mutex->owner, current_mutex_owner.floor_prio);
+       }
+     
        LOG_DBG("deadline of the thread after setting deadline %lld\n", _current->base.prio_deadline);
-       result=true;
+       reshedule_flag =true;
        #endif
         LOG_DBG("thread %s has acquired mutex %p with ceiling %d and floor %lld\n", k_thread_name_get(k_current_get()), mutex, mutex->resource_ceiling, mutex->resource_floor);
        SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_mutex_ceiling_floor, lock, mutex, timeout, 0);
 
           k_spin_unlock(&lock, key);       
-         if(result)
-         {
-            LOG_DBG("rescheduling after acquiring mutex %p\n", mutex);
+        //  if(result)
+        //  {
+        //     LOG_DBG("rescheduling after acquiring mutex %p\n", mutex);
           
-             k_reschedule();
-            //  z_reschedule(&lock, key);           
-        }  
+        //      k_reschedule();
+        //     //  z_reschedule(&lock, key);           
+        // }  
           
         return 0;
       }
@@ -442,13 +472,13 @@ LOG_DBG("thread %s is trying to acquire mutex %p with ceiling %d and floor %lld 
 
       LOG_DBG("therad %s is waiting for mutex %p\n", k_thread_name_get(k_current_get()), mutex); 
     SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_mutex_ceiling_floor, lock, mutex, timeout);
-int got_mutex = z_pend_curr(&lock, key, &wait_q_mutex_ceiling_floor, timeout);
-
-if(got_mutex == 0)
-{
+// int got_mutex = z_pend_curr(&lock, key, &wait_q_mutex_ceiling_floor, timeout);
+z_pend_curr(&lock, key, &wait_q_mutex_ceiling_floor, timeout);
+// if(got_mutex == 0)
+// {
     LOG_DBG("therad %s is free after pending \n", k_thread_name_get(k_current_get()));
     goto unpend_success;
-}
+// }
 
     LOG_DBG("something bad happened when locking mutex %p thread name: %s\n", mutex, k_thread_name_get(k_current_get()));
      SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_mutex_ceiling_floor, lock, mutex, timeout, -EINVAL);
@@ -525,28 +555,35 @@ SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, unlock, mutex);
                 k_spin_unlock(&lock, key);
                 return -ENOMEM;
              }
-                 
-        int res=  z_thread_prio_set(_current, mutex->owner_orig_prio);
+              
+             if(mutex->owner_orig_prio != _current->base.prio)
+             {
+   reschedule_unlock_flag =  z_thread_prio_set(_current, mutex->owner_orig_prio);
+             }
+     
           
                 #ifdef CONFIG_SCHED_DEADLINE
-
+        if(mutex->owner_original_floor_prio != _current->base.prio_deadline)
+        {
          k_thread_absolute_deadline_set_64(_current,mutex->owner_original_floor_prio);
 
             res=1;
+        }
             LOG_DBG("released mutex %p, current prio: %d,  deadline: %lld thread name: %s\n", mutex, _current->base.prio, _current->base.prio_deadline, k_thread_name_get(k_current_get()));
             #else
              LOG_DBG("released mutex %p, current prio: %d thread name: %s\n", mutex, _current->base.prio, k_thread_name_get(k_current_get()));
             #endif
              LOG_DBG("looking for new owner of mutex %p \n", mutex);
 
-            bool reschedule_needed=false;
+             bool reschedule_needed=false;
             new_owner = z_unpend_first_thread_locked(&wait_q_mutex_ceiling_floor);
            if(new_owner != NULL)
            {
 
                        arch_thread_return_value_set(new_owner, 0);
-                		z_ready_thread(new_owner);
-                        reschedule_needed=true;
+                		z_sched_ready_locked(new_owner);
+                          reschedule_needed=true;
+                        reschedule_unlock_flag = true;
                         LOG_DBG("old therad is is returning \n");
            } 
       
@@ -561,14 +598,14 @@ SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_mutex_ceiling_floor, unlock, mutex);
         #endif
         
             SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_mutex_ceiling_floor, unlock, mutex, 0);
-             k_spin_unlock(&lock, key);
-            if(reschedule_needed || res)
-            {
+              k_spin_unlock(&lock, key);
+        //     if(reschedule_needed)
+        //     {
             
-            k_reschedule();
-        // z_reschedule(&lock, key);     
+        //      k_reschedule();
+        // //  z_reschedule(&lock, key);     
            
-        }
+        // }
     
             return 0;
            

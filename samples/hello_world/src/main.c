@@ -1,14 +1,25 @@
-/*
- * Copyright (c) 2012-2014 Wind River Systems, Inc.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
-#include <stdio.h>
+// Register the module and set its compile-time log level to Info
+LOG_MODULE_REGISTER(main_app, LOG_LEVEL_INF);
 
 int main(void)
 {
-	printf("Hello World! %s\n", CONFIG_BOARD_TARGET);
+    LOG_INF("Starting simple Zephyr logging example");
 
-	return 0;
+    int counter = 0;
+    while (1) {
+        // This debug message won't show unless the log level is set to Debug
+        LOG_DBG("Current counter value: %d", counter);
+
+        if (counter == 5) {
+            LOG_WRN("Counter has reached 5!");
+        }
+
+        counter++;
+        k_msleep(1000);
+    }
+
+    return 0;
 }
